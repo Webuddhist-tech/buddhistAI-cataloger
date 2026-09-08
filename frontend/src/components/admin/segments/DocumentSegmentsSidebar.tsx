@@ -5,7 +5,10 @@ import { List, useListRef, type RowComponentProps } from 'react-window';
 import { useDocument } from '@/hooks';
 import { getLabelColor, getStatusColor } from '@/components/outliner/utils';
 import type { Segment } from '../shared/types';
+import type { SanityCheckFinding } from '@/api/outliner';
 import { useActiveSegmentId, useDocumentSegmentNav } from './DocumentSegmentNavContext';
+import { useAdminSanityFindings } from './useAdminSanityCheck';
+import AdminSanityFindingIndicator from './AdminSanityFindingIndicator';
 
 const ROW_HEIGHT = 60;
 
@@ -15,14 +18,19 @@ function SegmentNavRow({
   segments,
   activeSegmentId,
   onSelect,
+  sanityFindingsBySegmentId,
+  documentContent,
 }: RowComponentProps<{
   segments: Segment[];
   activeSegmentId: string | null;
   onSelect: (segmentId: string) => void;
+  sanityFindingsBySegmentId: Map<string, SanityCheckFinding[]>;
+  documentContent: string;
 }>) {
   const segment = segments[index];
   if (!segment) return null;
   const isActive = segment.id === activeSegmentId;
+  const findings = sanityFindingsBySegmentId.get(segment.id);
   return (
     <div style={style} className="box-border px-2 pb-1">
       <button
@@ -41,14 +49,19 @@ function SegmentNavRow({
           {index + 1}
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
-          {segment.label && (
-            <span
-              className={`mb-0.5 w-fit rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getLabelColor(
-                segment.label
-              )}`}
-            >
-              {segment.label.charAt(0).toUpperCase() + segment.label.slice(1).toLowerCase()}
-            </span>
+          {(segment.label || Boolean(findings?.length)) && (
+          <span className="mb-0.5 flex items-center gap-1">
+            {segment.label && (
+              <span
+                className={`w-fit rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${getLabelColor(
+                  segment.label
+                )}`}
+              >
+                {segment.label.charAt(0).toUpperCase() + segment.label.slice(1).toLowerCase()}
+              </span>
+            )}
+            <AdminSanityFindingIndicator findings={findings} textContent={documentContent} />
+          </span>
           )}
           <span className="block truncate font-monlam text-sm text-gray-800">
             {segment.title?.trim() || segment.text?.trim() || '—'}
@@ -66,6 +79,8 @@ function DocumentSegmentsSidebar() {
   const activeSegmentId = useActiveSegmentId();
   const segments = document?.segments ?? [];
   const listRef = useListRef(null);
+  // Read-only; empty until the document toolbar runs a check.
+  const sanityFindingsBySegmentId = useAdminSanityFindings(documentId);
 
   const indexById = useMemo(() => {
     const map = new Map<string, number>();
@@ -107,7 +122,13 @@ function DocumentSegmentsSidebar() {
             rowComponent={SegmentNavRow}
             rowCount={segments.length}
             rowHeight={ROW_HEIGHT}
-            rowProps={{ segments, activeSegmentId, onSelect: requestScrollToSegment }}
+            rowProps={{
+              segments,
+              activeSegmentId,
+              onSelect: requestScrollToSegment,
+              sanityFindingsBySegmentId,
+              documentContent: document?.content ?? '',
+            }}
           />
         )}
       </div>

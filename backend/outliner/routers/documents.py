@@ -495,14 +495,15 @@ async def post_document_sanity_check(
 
     The document's full text is read from the database; the segment spans/labels come
     from the request body (the frontend sends what's currently in the editor) rather than
-    being re-read from the DB, so the check reflects exactly what the annotator sees.
-    Read-only: does not submit anything. Meant to be called before showing the submit
-    confirmation, so the annotator sees every flagged issue up front.
+    being re-read from the DB, so the check reflects exactly what the caller sees.
+    Read-only: does not submit anything and changes nothing. Available to the assigned
+    annotator (before submitting) and to the assigned reviewer (while reviewing), both of
+    whom see the check from their own document view.
     """
     doc = fetch_document_by_id(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    assert_assigned_document_annotator(doc.user_id, current_user)
+    assert_assigned_document_participant(doc.user_id, doc.reviewer_id, current_user)
     segments = [segment.model_dump() for segment in payload.segments]
     return await check_document_sanity_ctrl(db, document_id, segments)
 

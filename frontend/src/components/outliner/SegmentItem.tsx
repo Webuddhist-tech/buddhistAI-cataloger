@@ -470,12 +470,12 @@ const SegmentLabelSelector = ({
 
 const SanityFindingIndicator = ({ segment }: { segment: TextSegment }) => {
   const { t } = useTranslation()
-  const { sanityFindingsBySegmentId } = useDocument()
+  const { sanityFindingsBySegmentId, textContent } = useDocument()
   const findings = sanityFindingsBySegmentId.get(segment.id)
   if (!findings || findings.length === 0) return null
   const hasBlocker = findings.some((finding) => finding.severity === 'blocker')
   return (
-    <span title={sanityFindingsTooltip(findings, t)}>
+    <span title={sanityFindingsTooltip(findings, t, textContent)}>
       <AlertCircle className={`h-4 w-4 shrink-0 ${hasBlocker ? 'text-red-500' : 'text-amber-500'}`} />
     </span>
   )

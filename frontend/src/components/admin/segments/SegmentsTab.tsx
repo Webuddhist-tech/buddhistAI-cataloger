@@ -10,7 +10,10 @@ import {
 } from 'react-window';
 import { useDocumentSegmentNav, useScrollRequest } from './DocumentSegmentNavContext';
 import type { Document, Segment } from '../shared/types';
+import type { SanityCheckFinding } from '@/api/outliner';
 import SegmentRow from './SegmentRow';
+import AdminSanityCheckButton from './AdminSanityCheckButton';
+import { useAdminSanityCheck } from './useAdminSanityCheck';
 import { Button } from '@/components/ui/button';
 import {
   approveOutlinerDocument,
@@ -52,6 +55,8 @@ function AdminDocumentSegmentRow({
   documentFilename,
   onSegmentBodyCaretChange,
   canEditReview,
+  sanityFindingsBySegmentId,
+  documentContent,
 }: RowComponentProps<{
   segments: Segment[];
   expandedSegments: Set<string>;
@@ -59,6 +64,8 @@ function AdminDocumentSegmentRow({
   documentFilename?: string | null;
   onSegmentBodyCaretChange?: (segmentId: string, offset: number | null) => void;
   canEditReview: boolean;
+  sanityFindingsBySegmentId: Map<string, SanityCheckFinding[]>;
+  documentContent: string;
 }>) {
   const segment = segments[index];
   if (!segment) return null;
@@ -72,6 +79,8 @@ function AdminDocumentSegmentRow({
         listIndex={index + 1}
         onSegmentBodyCaretChange={onSegmentBodyCaretChange}
         canEditReview={canEditReview}
+        sanityFindings={sanityFindingsBySegmentId.get(segment.id)}
+        documentContent={documentContent}
       />
     </div>
   );
@@ -103,7 +112,10 @@ function SegmentsTab({
   const { documentId } = useParams<{ documentId: string }>();
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
-  const { setActiveSegmentId } = useDocumentSegmentNav();
+  const { setActiveSegmentId, requestScrollToSegment } = useDocumentSegmentNav();
+  const documentContent = selectedDocument?.content ?? '';
+  // One shared result for the toolbar dialog and the per-segment alert icons.
+  const sanityCheck = useAdminSanityCheck(documentId, segments);
   const scrollRequest = useScrollRequest();
   const listRef = useListRef(null);
   const handledScrollNonce = useRef<number | null>(null);
@@ -540,6 +552,18 @@ function SegmentsTab({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <AdminSanityCheckButton
+                report={sanityCheck.report}
+                isChecking={sanityCheck.isChecking}
+                checkFailed={sanityCheck.checkFailed}
+                onRunCheck={sanityCheck.runCheck}
+                documentContent={documentContent}
+                disabled={!documentId || loadingSegments || segments.length === 0}
+                onNavigateToSegment={(segmentId) => {
+                  setActiveSegmentId(segmentId);
+                  requestScrollToSegment(segmentId);
+                }}
+              />
               <Button
                 size="sm"
                 onClick={handleApproveAll}
@@ -581,6 +605,8 @@ function SegmentsTab({
                 documentFilename: selectedDocument.filename,
                 onSegmentBodyCaretChange: handleSegmentBodyCaretChange,
                 canEditReview,
+                sanityFindingsBySegmentId: sanityCheck.findingsBySegmentId,
+                documentContent,
               }}
             />
           </div>

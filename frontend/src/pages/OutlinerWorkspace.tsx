@@ -765,6 +765,20 @@ const OutlinerWorkspace: React.FC = () => {
  
   const listRef= useListRef(null);
 
+  /**
+   * Selects a segment and brings it into view. The workspace list is virtualized, so an
+   * off-screen row has no DOM node to scroll to and must go through the list API.
+   */
+  const handleNavigateToSegment = useCallback(
+    (segmentId: string) => {
+      handleSegmentClick(segmentId);
+      const index = currentSegments.findIndex((segment) => segment.id === segmentId);
+      if (index < 0) return;
+      listRef.current?.scrollToRow({ align: 'start', behavior: 'auto', index });
+    },
+    [handleSegmentClick, currentSegments, listRef]
+  );
+
   const cursorContextValue = useMemo(
     () => ({
       cursorPosition,
@@ -913,6 +927,7 @@ const OutlinerWorkspace: React.FC = () => {
               onSegmentStatusUpdate: handleSegmentStatusUpdate,
               onResetSegments: resetSegmentsBackend,
               onCheckSanity: handleCheckSanity,
+              onNavigateToSegment: handleNavigateToSegment,
             }}
           >
             <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 4rem)' }}>

@@ -38,6 +38,8 @@ import { getSegmentHighlightWords } from '@/utils/segmentHighlightWords';
 import { SegmentAttributionBar } from './SegmentAttributionBar';
 import { MarkedTextChips } from './MarkedTextChips';
 import { normalizeMarks, toMarkedSpans, type DraftMark } from './markedSpans';
+import AdminSanityFindingIndicator from './AdminSanityFindingIndicator';
+import type { SanityCheckFinding } from '@/api/outliner';
 
 const REJECTION_REASONS = [
   'reconstructed ལ་འགྲིག་རྟགས་བཀོད་དགོས།',
@@ -60,6 +62,10 @@ interface SegmentRowProps {
   readonly onSegmentBodyCaretChange?: (segmentId: string, offset: number | null) => void;
   /** When false, segment review actions and title/author edits are read-only. */
   readonly canEditReview?: boolean;
+  /** Sanity-check findings on this segment, once a check has been run. */
+  readonly sanityFindings?: SanityCheckFinding[];
+  /** Full document text, for showing the text each finding flags in the tooltip. */
+  readonly documentContent?: string;
 }
 
 /** null = no reviewer suggestion in DB; '' = explicit empty; else trimmed text. */
@@ -90,6 +96,8 @@ function SegmentRow({
   listIndex,
   onSegmentBodyCaretChange,
   canEditReview = false,
+  sanityFindings,
+  documentContent = '',
 }: SegmentRowProps) {
   const { documentId } = useParams<{ documentId: string }>();
   const queryClient = useQueryClient();
@@ -703,17 +711,23 @@ function SegmentRow({
           <div className="space-y-2 pb-2 border-b border-gray-200">
         
             <div className="flex flex-wrap justify-between items-center gap-2">
-                {segment.label && (
+             {(segment.label || Boolean(sanityFindings?.length)) && (
              <div className="inline-flex  items-center gap-1 mt-2 mb-1">
-               <span
-                 className={
-                   "px-2 text-sm font-semibold py-0.5 rounded-full  " +
-                   getLabelColor(segment.label)
-                 }
-                 title={`Label: ${segment.label}`}
-               >
-                 {segment.label.charAt(0).toUpperCase() + segment.label.slice(1)}
-               </span>
+               {segment.label && (
+                 <span
+                   className={
+                     "px-2 text-sm font-semibold py-0.5 rounded-full  " +
+                     getLabelColor(segment.label)
+                   }
+                   title={`Label: ${segment.label}`}
+                 >
+                   {segment.label.charAt(0).toUpperCase() + segment.label.slice(1)}
+                 </span>
+               )}
+               <AdminSanityFindingIndicator
+                 findings={sanityFindings}
+                 textContent={documentContent}
+               />
              </div>
            )}
             <div className="min-w-0 " onClick={(e) => e.stopPropagation()}>

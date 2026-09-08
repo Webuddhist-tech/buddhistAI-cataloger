@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -8,32 +10,44 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { SanityCheckFindingsList } from '../SanityCheckWarningContent';
-import { useTranslation } from 'react-i18next';
-import { useDocument, useActions } from '../contexts';
-import { useOutlinerDocument } from '@/hooks/useOutlinerDocument';
-import { ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
+import { SanityCheckFindingsList } from '@/components/outliner/SanityCheckWarningContent';
+import type { SanityCheckReport } from '@/api/outliner';
+
+interface AdminSanityCheckButtonProps {
+  /** Shared check result (see `useAdminSanityCheck`), also used by the per-segment icons. */
+  readonly report: SanityCheckReport | null;
+  readonly isChecking: boolean;
+  readonly checkFailed: boolean;
+  readonly onRunCheck: () => void;
+  /** Full document text, for the text each finding flags. */
+  readonly documentContent: string;
+  readonly disabled?: boolean;
+  readonly onNavigateToSegment?: (segmentId: string) => void;
+}
 
 /**
- * Standalone "preview" sanity check: runs the linter on demand, independent of the
- * "Submit to Review" flow, so the annotator can see what it flags at any point while
- * working — including before every segment is marked checked. Shares its result (via
- * DocumentContext) with the per-segment alert icons in the segment list and workspace,
- * so this button, the sidebar, and the main content never disagree about what's flagged.
+ * Toolbar trigger and results dialog for the reviewer's segmentation sanity check.
+ * The reviewer pages don't mount the outliner's Document/Actions providers, so the shared
+ * findings list gets the document text and navigation callback as props. Read-only.
  */
-function SanityCheckButton() {
+function AdminSanityCheckButton({
+  report,
+  isChecking,
+  checkFailed,
+  onRunCheck,
+  documentContent,
+  disabled = false,
+  onNavigateToSegment,
+}: AdminSanityCheckButtonProps) {
   const { t } = useTranslation();
-  const { sanityReport, isCheckingSanity, sanityCheckFailed } = useDocument();
-  const { onCheckSanity } = useActions();
-  const { documentId, isBusy } = useOutlinerDocument();
   const [open, setOpen] = useState(false);
 
-  const hasFindings = (sanityReport?.flagged_count ?? 0) > 0;
-  const hasRunCheck = sanityReport !== null;
+  const hasFindings = (report?.flagged_count ?? 0) > 0;
+  const hasRunCheck = report != null;
 
   function openDialog() {
     setOpen(true);
-    onCheckSanity();
+    onRunCheck();
   }
 
   return (
@@ -41,15 +55,18 @@ function SanityCheckButton() {
       <Button
         type="button"
         variant="outline"
-        disabled={isBusy || !documentId}
+        size="sm"
+        disabled={disabled}
         title={t('outliner.workspace.sanityCheck.buttonTitle')}
-        className="flex items-center gap-1.5"
+        className="shrink-0 flex items-center gap-1.5"
         onClick={openDialog}
       >
-        {isCheckingSanity ? (
+        {isChecking ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
-          <ShieldCheck className={`w-4 h-4 ${hasFindings ? 'text-red-600' : 'text-green-600'}`} />
+          <ShieldCheck
+            className={`w-4 h-4 ${hasFindings ? 'text-red-600' : 'text-green-600'}`}
+          />
         )}
         <span className="hidden sm:inline">{t('outliner.workspace.sanityCheck.button')}</span>
       </Button>
@@ -59,38 +76,40 @@ function SanityCheckButton() {
           <DialogHeader>
             <DialogTitle>{t('outliner.workspace.sanityCheck.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              {hasFindings && sanityReport
+              {hasFindings && report
                 ? t('outliner.workspace.sanityCheck.resultsDescription', {
-                    blockerCount: sanityReport.blocker_count,
-                    advisoryCount: sanityReport.advisory_count,
+                    blockerCount: report.blocker_count,
+                    advisoryCount: report.advisory_count,
                   })
                 : t('outliner.workspace.sanityCheck.noIssuesDescription')}
             </DialogDescription>
           </DialogHeader>
 
-          {isCheckingSanity && (
+          {isChecking && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               {t('outliner.submitReview.sanityWarning.checking')}
             </div>
           )}
 
-          {!isCheckingSanity && sanityCheckFailed && (
+          {!isChecking && checkFailed && (
             <p className="text-xs text-muted-foreground">
               {t('outliner.workspace.sanityCheck.checkFailed')}
             </p>
           )}
 
-          {!isCheckingSanity && hasRunCheck && !sanityCheckFailed && !hasFindings && (
+          {!isChecking && hasRunCheck && !checkFailed && !hasFindings && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle2 className="w-4 h-4" />
               {t('outliner.workspace.sanityCheck.noIssuesTitle')}
             </div>
           )}
 
-          {hasFindings && sanityReport && (
+          {hasFindings && report && (
             <SanityCheckFindingsList
-              findings={sanityReport.findings}
+              findings={report.findings}
+              textContent={documentContent}
+              onNavigateToSegment={onNavigateToSegment}
               onNavigate={() => setOpen(false)}
             />
           )}
@@ -106,4 +125,4 @@ function SanityCheckButton() {
   );
 }
 
-export default SanityCheckButton;
+export default AdminSanityCheckButton;

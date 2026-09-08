@@ -47,7 +47,7 @@ const OutlineSegmentRow = memo(function OutlineSegmentRow({
   onNavigate,
 }: OutlineSegmentRowProps) {
   const { t } = useTranslation();
-  const { sanityFindingsBySegmentId } = useDocument();
+  const { sanityFindingsBySegmentId, textContent } = useDocument();
   const findings = sanityFindingsBySegmentId.get(seg.id);
   const hasFindings = Boolean(findings && findings.length > 0);
   const hasBlockerFinding = Boolean(findings?.some((finding) => finding.severity === 'blocker'));
@@ -81,7 +81,7 @@ const OutlineSegmentRow = memo(function OutlineSegmentRow({
           {displayIndex + 1}
         </span>
         {hasFindings && findings && (
-          <span title={sanityFindingsTooltip(findings, t)} className="shrink-0 mt-0.5">
+          <span title={sanityFindingsTooltip(findings, t, textContent)} className="shrink-0 mt-0.5">
             <AlertCircle className={`h-4 w-4 ${hasBlockerFinding ? 'text-red-500' : 'text-amber-500'}`} />
           </span>
         )}

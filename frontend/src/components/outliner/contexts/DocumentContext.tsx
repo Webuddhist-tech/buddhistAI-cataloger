@@ -36,6 +36,11 @@ export function useDocument() {
   return context
 }
 
+/** Like `useDocument`, but returns null outside a provider instead of throwing. */
+export function useOptionalDocument() {
+  return useContext(DocumentContext)
+}
+
 interface DocumentProviderProps {
   children: React.ReactNode
   value: DocumentContextValue

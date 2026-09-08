@@ -613,7 +613,7 @@
         "checkFailed": "Could not run the sanity check; you can still submit.",
         "goBack": "Go Back",
         "submitAnyway": "Submit Anyway",
-        "charSpan": "chars {{start}}–{{end}}",
+        "goToSegment": "Click to go to this segment",
         "severity": {
           "blocker": "Blocker",
           "advisory": "Advisory"

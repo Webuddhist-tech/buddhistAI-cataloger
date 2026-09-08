@@ -18,6 +18,8 @@ interface ActionsContextValue {
   onSegmentStatusUpdate?: (segmentId: string, status: 'checked' | 'unchecked') => Promise<void>
   onResetSegments?: () => void
   onCheckSanity: () => void
+  /** Selects a segment and scrolls the (virtualized) workspace list to it. */
+  onNavigateToSegment?: (segmentId: string) => void
   expandedSegmentIds: readonly string[]
   toggleSegmentExpanded: (segmentId: string) => void
   isAllSegmentsExpanded: boolean
@@ -32,6 +34,11 @@ export function useActions() {
     throw new Error('useActions must be used within ActionsProvider')
   }
   return context
+}
+
+/** Like `useActions`, but returns null outside a provider instead of throwing. */
+export function useOptionalActions() {
+  return useContext(ActionsContext)
 }
 
 interface ActionsProviderProps {
