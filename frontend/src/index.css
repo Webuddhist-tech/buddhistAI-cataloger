@@ -53,6 +53,12 @@ html[lang="bo"] label {
   .scroll-container {
     overflow-anchor: none;
   }
+
+  /* Transient highlight for a sanity-check finding; see utils/flashSegmentRange.ts. */
+  ::highlight(sanity-finding-flash) {
+    background-color: rgb(253 224 71);
+    color: rgb(69 26 3);
+  }
   .cm-editor div {
     font-family: 'noto', sans-serif !important;
     line-height: 2;

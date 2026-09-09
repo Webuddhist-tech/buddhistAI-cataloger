@@ -19,7 +19,7 @@ interface ActionsContextValue {
   onResetSegments?: () => void
   onCheckSanity: () => void
   /** Selects a segment and scrolls the (virtualized) workspace list to it. */
-  onNavigateToSegment?: (segmentId: string) => void
+  onNavigateToSegment?: (segmentId: string, range?: { start: number; end: number }) => void
   expandedSegmentIds: readonly string[]
   toggleSegmentExpanded: (segmentId: string) => void
   isAllSegmentsExpanded: boolean

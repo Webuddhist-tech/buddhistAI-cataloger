@@ -793,6 +793,7 @@ function SegmentRow({
             {isExpanded ? (
               <div
                 ref={segmentBodyRef}
+                data-segment-body-id={segment.id}
                 tabIndex={0}
                 aria-label="Segment text (read-only; click to sync volume image)"
                 onMouseUp={() => {

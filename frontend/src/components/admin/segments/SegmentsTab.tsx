@@ -14,6 +14,7 @@ import type { SanityCheckFinding } from '@/api/outliner';
 import SegmentRow from './SegmentRow';
 import AdminSanityCheckButton from './AdminSanityCheckButton';
 import { useAdminSanityCheck } from './useAdminSanityCheck';
+import { flashSegmentRange } from '@/components/outliner/utils/flashSegmentRange';
 import { Button } from '@/components/ui/button';
 import {
   approveOutlinerDocument,
@@ -559,9 +560,18 @@ function SegmentsTab({
                 onRunCheck={sanityCheck.runCheck}
                 documentContent={documentContent}
                 disabled={!documentId || loadingSegments || segments.length === 0}
-                onNavigateToSegment={(segmentId) => {
+                onNavigateToSegment={(segmentId, range) => {
                   setActiveSegmentId(segmentId);
                   requestScrollToSegment(segmentId);
+                  const segment = segments.find((s) => s.id === segmentId);
+                  const base = segment?.span_start;
+                  if (!range || base == null) return;
+                  // A collapsed row renders a truncated preview, so expand before flashing.
+                  if (!expandedSegments.has(segmentId)) onToggleExpansion(segmentId);
+                  flashSegmentRange(segmentId, range.start - base, range.end - base, {
+                    // The row list settles over several frames; keep it in view meanwhile.
+                    bringRowIntoView: () => requestScrollToSegment(segmentId),
+                  });
                 }}
               />
               <Button

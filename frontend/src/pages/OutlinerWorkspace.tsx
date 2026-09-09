@@ -22,6 +22,7 @@ import {
   type AnnotationSidebarTab,
 } from '@/components/outliner/AnnotationSidebar';
 import { Workspace } from '@/components/outliner/Workspace';
+import { flashSegmentRange } from '@/components/outliner/utils/flashSegmentRange';
 import {
   DocumentProvider,
   SelectionProvider,
@@ -768,13 +769,30 @@ const OutlinerWorkspace: React.FC = () => {
   /**
    * Selects a segment and brings it into view. The workspace list is virtualized, so an
    * off-screen row has no DOM node to scroll to and must go through the list API.
+   *
+   * With `range` (document-absolute, e.g. a finding's char span) the segment is expanded and
+   * the flagged run itself is scrolled to and flashed, so the caller lands on the exact spot.
    */
   const handleNavigateToSegment = useCallback(
-    (segmentId: string) => {
+    (segmentId: string, range?: { start: number; end: number }) => {
       handleSegmentClick(segmentId);
       const index = currentSegments.findIndex((segment) => segment.id === segmentId);
       if (index < 0) return;
-      listRef.current?.scrollToRow({ align: 'start', behavior: 'auto', index });
+
+      // Reused by the flash below, which re-runs it until the row has mounted.
+      const scrollRowIntoView = () =>
+        listRef.current?.scrollToRow({ align: 'start', behavior: 'auto', index });
+      scrollRowIntoView();
+
+      const base = currentSegments[index].span_start;
+      if (!range || base == null) return;
+      // Collapsed rows render a truncated preview, so the range would have nothing to hit.
+      setExpandedSegmentIds((prev) =>
+        prev.includes(segmentId) ? prev : [...prev, segmentId]
+      );
+      flashSegmentRange(segmentId, range.start - base, range.end - base, {
+        bringRowIntoView: scrollRowIntoView,
+      });
     },
     [handleSegmentClick, currentSegments, listRef]
   );

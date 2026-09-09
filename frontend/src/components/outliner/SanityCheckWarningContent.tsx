@@ -11,7 +11,7 @@ interface SanityCheckFindingsListProps {
   /** Defaults to DocumentContext; pass explicitly where that provider isn't mounted. */
   textContent?: string;
   /** Defaults to ActionsContext; findings aren't clickable when neither is available. */
-  onNavigateToSegment?: (segmentId: string) => void;
+  onNavigateToSegment?: (segmentId: string, range?: { start: number; end: number }) => void;
 }
 
 const MAX_FLAGGED_LENGTH = 160;
@@ -100,9 +100,9 @@ export function SanityCheckFindingsList({
   const textContent = textContentProp ?? documentContext?.textContent ?? '';
   const onNavigateToSegment = onNavigateToSegmentProp ?? actionsContext?.onNavigateToSegment;
 
-  function goToFinding(segmentId: string) {
-    if (!onNavigateToSegment) return;
-    onNavigateToSegment(segmentId);
+  function goToFinding(finding: SanityCheckFinding) {
+    if (!onNavigateToSegment || !finding.segment_id) return;
+    onNavigateToSegment(finding.segment_id, finding.char_span);
     onNavigate?.();
   }
 
@@ -122,11 +122,15 @@ export function SanityCheckFindingsList({
               role: 'button',
               tabIndex: 0,
               title: t('outliner.submitReview.sanityWarning.goToSegment'),
-              onClick: () => goToFinding(finding.segment_id),
+              onClick: () => {
+                // Don't navigate away from a selection the reader is making to copy.
+                if (!globalThis.getSelection()?.isCollapsed) return;
+                goToFinding(finding);
+              },
               onKeyDown: (event: React.KeyboardEvent) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  goToFinding(finding.segment_id);
+                  goToFinding(finding);
                 }
               },
             })}
@@ -142,7 +146,7 @@ export function SanityCheckFindingsList({
               </span>
             </div>
             {excerpt && (
-              <p className="wrap-break-word leading-relaxed">
+              <p className="wrap-break-word leading-relaxed cursor-text select-text">
                 <span className="text-muted-foreground">{excerpt.before}</span>
                 <mark className="bg-amber-200 text-foreground rounded-sm px-0.5">
                   {excerpt.flagged}

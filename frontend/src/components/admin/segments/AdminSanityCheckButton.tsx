@@ -22,7 +22,10 @@ interface AdminSanityCheckButtonProps {
   /** Full document text, for the text each finding flags. */
   readonly documentContent: string;
   readonly disabled?: boolean;
-  readonly onNavigateToSegment?: (segmentId: string) => void;
+  readonly onNavigateToSegment?: (
+    segmentId: string,
+    range?: { start: number; end: number }
+  ) => void;
 }
 
 /**

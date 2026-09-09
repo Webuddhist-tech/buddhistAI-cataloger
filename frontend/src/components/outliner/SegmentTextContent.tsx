@@ -47,6 +47,7 @@ export const SegmentTextContent = React.forwardRef<HTMLDivElement, SegmentTextCo
       <div
         ref={contentRef}
         data-segment-id={segmentId}
+        data-segment-body-id={segmentId}
         className="segment-text-content cursor-text font-monlam text-gray-900 whitespace-pre-wrap wrap-break-word select-text relative outline-none"
         contentEditable
         suppressContentEditableWarning
