@@ -137,12 +137,16 @@ def get_reviewer_approved_counts(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     user_id: Optional[str] = None,
+    scope: str = "of_annotator",
 ) -> List[Dict[str, Any]]:
     """
     Per-reviewer count of segments they approved (status 'approved', reviewed_by_id = reviewer).
 
-    Date window scoped by coalesce(reviewed_at, updated_at).
-    user_id filter here scopes by document.user_id (annotator), matching the page filter.
+    Date window scoped by reviewed_at on the segment.
+
+    scope decides what a user_id filter matches:
+      - "of_annotator": reviewers of that user's documents (document.user_id).
+      - "by_reviewer":  that user's own review output (segment.reviewed_by_id).
     """
     clauses = [
         (OutlinerDocument.status != "deleted") | (OutlinerDocument.status.is_(None)),
@@ -156,7 +160,11 @@ def get_reviewer_approved_counts(
     if end_date:
         clauses.append(t <= end_date)
     if user_id:
-        clauses.append(OutlinerDocument.user_id == user_id)
+        clauses.append(
+            OutlinerSegment.reviewed_by_id == user_id
+            if scope == "by_reviewer"
+            else OutlinerDocument.user_id == user_id
+        )
 
     rows = (
         db.query(OutlinerSegment.reviewed_by_id, func.count(OutlinerSegment.id))
@@ -197,15 +205,19 @@ def get_reviewer_approved_counts(
     if end_date:
         rej_clauses.append(SegmentRejection.created_at <= end_date)
     if user_id:
-        # scope by document annotator when user filter is active
-        rej_clauses.append(OutlinerDocument.user_id == user_id)
+        rej_clauses.append(
+            SegmentRejection.reviewer_id == user_id
+            if scope == "by_reviewer"
+            else OutlinerDocument.user_id == user_id
+        )
 
     rej_query = (
         db.query(SegmentRejection.reviewer_id, func.count(SegmentRejection.id))
         .filter(and_(*rej_clauses))
         .group_by(SegmentRejection.reviewer_id)
     )
-    if user_id:
+    if user_id and scope != "by_reviewer":
+        # only the annotator scope needs the document; reviewer_id is on the rejection
         rej_query = (
             rej_query
             .join(OutlinerSegment, SegmentRejection.segment_id == OutlinerSegment.id)

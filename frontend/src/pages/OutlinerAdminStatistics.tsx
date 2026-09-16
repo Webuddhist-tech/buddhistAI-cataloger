@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { SkeletonLarger } from '@/components/ui/skeleton';
 import { useStatistics } from '@/hooks/useStatistics';
+import { useOutlinerUsers } from '@/hooks';
 import type { DashboardStatsFilters } from '@/hooks';
 import { UserFilter } from '@/components/admin/documents/UserFilter';
 import DateRangeFilter from '@/components/admin/documents/DateRangeFilter';
@@ -51,6 +52,162 @@ function SortIcon<F extends string>({
   return dir === 'desc'
     ? <ArrowDown className="ml-1 inline h-3.5 w-3.5" />
     : <ArrowUp className="ml-1 inline h-3.5 w-3.5" />;
+}
+
+function ReviewerTable({
+  rows,
+  eyebrow,
+  heading,
+  emptyMessage,
+  sortField,
+  sortDir,
+  onToggleSort,
+}: Readonly<{
+  rows: ReviewerApprovedRow[];
+  eyebrow: string;
+  heading: string;
+  emptyMessage: string;
+  sortField: ReviewerSortField;
+  sortDir: SortDir;
+  onToggleSort: (field: ReviewerSortField) => void;
+}>) {
+  const total = rows.reduce((s, r) => s + r.segments_reviewed, 0);
+  const editedTotal = rows.reduce((s, r) => s + r.edited_segments, 0);
+  const rejectedTotal = rows.reduce((s, r) => s + r.rejection_count, 0);
+
+  return (
+    <section className={cardPanel}>
+      <div className="mb-4 min-w-0 border-l-[3px] border-primary pl-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">{eyebrow}</p>
+        <h3 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">{heading}</h3>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-stone-200/80 bg-stone-50/40 py-12 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="max-h-[min(640px,60vh)] overflow-y-auto overflow-x-auto rounded-lg border border-stone-200/80 bg-white/60">
+          <table className="w-full min-w-[24rem] border-collapse text-sm">
+            <thead className="sticky top-0 z-[1] shadow-[0_1px_0_0_rgb(231_229_228)]">
+              <tr className="border-b border-stone-200 bg-stone-50/95 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+                <th className="px-4 py-3">No.</th>
+                <th className="px-4 py-3">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                    onClick={() => onToggleSort('name')}
+                  >
+                    Reviewer
+                    <SortIcon<ReviewerSortField> field="name" active={sortField} dir={sortDir} />
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-right tabular-nums">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                    onClick={() => onToggleSort('segments_reviewed')}
+                  >
+                    Segments Reviewed
+                    <SortIcon<ReviewerSortField>
+                      field="segments_reviewed"
+                      active={sortField}
+                      dir={sortDir}
+                    />
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-right tabular-nums">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                    onClick={() => onToggleSort('edited_segments')}
+                  >
+                    Edited
+                    <SortIcon<ReviewerSortField>
+                      field="edited_segments"
+                      active={sortField}
+                      dir={sortDir}
+                    />
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-right tabular-nums" title={REJECTION_RATE_FORMULA}>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                    onClick={() => onToggleSort('rejection_rate')}
+                  >
+                    Rejected
+                    <SortIcon<ReviewerSortField>
+                      field="rejection_rate"
+                      active={sortField}
+                      dir={sortDir}
+                    />
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => (
+                <tr
+                  key={row.user_id ?? row.name}
+                  className="border-b border-stone-100 last:border-0 hover:bg-stone-50/80"
+                >
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">{idx + 1}</td>
+                  <td className="max-w-[14rem] px-4 py-3 font-medium leading-snug text-foreground sm:max-w-none sm:whitespace-normal">
+                    <span className="break-words">{row.name}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-blue-700">
+                    {row.segments_reviewed.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-amber-600">
+                    {row.edited_segments.toLocaleString()}{' '}
+                    <span className="text-muted-foreground" title={REVIEWER_EDITED_RATE_FORMULA}>
+                      ({editedRate(row.edited_segments, row.segments_reviewed).toFixed(1)}%)
+                    </span>
+                  </td>
+                  <td
+                    className="px-4 py-3 text-right tabular-nums text-red-600"
+                    title={REJECTION_RATE_FORMULA}
+                  >
+                    {row.rejection_count.toLocaleString()}{' '}
+                    <span className="text-muted-foreground">
+                      ({rejectionRate(row.segments_reviewed, row.rejection_count).toFixed(1)}%)
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="sticky bottom-0 bg-stone-50/95 shadow-[0_-1px_0_0_rgb(231_229_228)]">
+              <tr className="border-t border-stone-200 text-xs font-semibold text-muted-foreground">
+                <td className="px-4 py-3" colSpan={2}>Total</td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-700">
+                  {total.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-amber-600">
+                  {editedTotal.toLocaleString()}{' '}
+                  <span
+                    className="font-normal text-muted-foreground"
+                    title={REVIEWER_EDITED_RATE_FORMULA}
+                  >
+                    ({editedRate(editedTotal, total).toFixed(1)}%)
+                  </span>
+                </td>
+                <td
+                  className="px-4 py-3 text-right tabular-nums font-semibold text-red-600"
+                  title={REJECTION_RATE_FORMULA}
+                >
+                  {rejectedTotal.toLocaleString()}{' '}
+                  <span className="font-normal text-muted-foreground">
+                    ({rejectionRate(total, rejectedTotal).toFixed(1)}%)
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function OutlinerAdminStatistics() {
@@ -120,8 +277,15 @@ function OutlinerAdminStatistics() {
     endDateParsed === initialFilters.endDate &&
     (filters.userId || 'all') === (initialFilters.userId || 'all');
 
+  // filtered user's name for the review-output headings; same cached query as UserFilter
+  const { users } = useOutlinerUsers();
+  const selectedUserName = selectedUserId
+    ? users.find((u) => u.id === selectedUserId)?.name
+    : undefined;
+
   const annotatorRows: AnnotatorApprovedRow[] = data?.annotators ?? [];
   const reviewerRows: ReviewerApprovedRow[] = data?.reviewers ?? [];
+  const reviewedByUserRows: ReviewerApprovedRow[] = data?.reviewed_by_user ?? [];
 
   const sortedAnnotators = useMemo(() => {
     const dir = annotatorSortDir === 'desc' ? -1 : 1;
@@ -139,21 +303,33 @@ function OutlinerAdminStatistics() {
     );
   }, [annotatorRows, annotatorSortField, annotatorSortDir]);
 
-  const sortedReviewers = useMemo(() => {
-    const dir = reviewerSortDir === 'desc' ? -1 : 1;
-    const valueOf = (r: ReviewerApprovedRow) => {
-      if (reviewerSortField === 'rejection_rate')
-        return rejectionRate(r.segments_reviewed, r.rejection_count);
-      if (reviewerSortField === 'edited_segments')
-        return editedRate(r.edited_segments, r.segments_reviewed);
-      return r.segments_reviewed;
-    };
-    return [...reviewerRows].sort((a, b) =>
-      reviewerSortField === 'name'
-        ? dir * a.name.localeCompare(b.name)
-        : dir * (valueOf(a) - valueOf(b)),
-    );
-  }, [reviewerRows, reviewerSortField, reviewerSortDir]);
+  const sortReviewers = useCallback(
+    (rows: ReviewerApprovedRow[]) => {
+      const dir = reviewerSortDir === 'desc' ? -1 : 1;
+      const valueOf = (r: ReviewerApprovedRow) => {
+        if (reviewerSortField === 'rejection_rate')
+          return rejectionRate(r.segments_reviewed, r.rejection_count);
+        if (reviewerSortField === 'edited_segments')
+          return editedRate(r.edited_segments, r.segments_reviewed);
+        return r.segments_reviewed;
+      };
+      return [...rows].sort((a, b) =>
+        reviewerSortField === 'name'
+          ? dir * a.name.localeCompare(b.name)
+          : dir * (valueOf(a) - valueOf(b)),
+      );
+    },
+    [reviewerSortField, reviewerSortDir],
+  );
+
+  const sortedReviewers = useMemo(
+    () => sortReviewers(reviewerRows),
+    [reviewerRows, sortReviewers],
+  );
+  const sortedReviewedByUser = useMemo(
+    () => sortReviewers(reviewedByUserRows),
+    [reviewedByUserRows, sortReviewers],
+  );
 
   const annotatorTotal = sortedAnnotators.reduce((s, r) => s + r.segments_approved, 0);
   const annotatorEditedTotal = sortedAnnotators.reduce((s, r) => s + r.edited_segments, 0);
@@ -162,9 +338,6 @@ function OutlinerAdminStatistics() {
     (s, r) => s + r.rejected_segments,
     0,
   );
-  const reviewerTotal = sortedReviewers.reduce((s, r) => s + r.segments_reviewed, 0);
-  const reviewerEditedTotal = sortedReviewers.reduce((s, r) => s + r.edited_segments, 0);
-  const reviewerRejectedTotal = sortedReviewers.reduce((s, r) => s + r.rejection_count, 0);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
@@ -373,149 +546,35 @@ function OutlinerAdminStatistics() {
             )}
           </section>
 
-          {/* Reviewer table */}
-          <section className={cardPanel}>
-            <div className="mb-4 min-w-0 border-l-[3px] border-primary pl-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">
-                Per Reviewer
-              </p>
-              <h3 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">
-                Reviewer Approved Segments
-              </h3>
-            </div>
+          <ReviewerTable
+            rows={sortedReviewers}
+            eyebrow="Per Reviewer"
+            heading="Reviewer Approved Segments"
+            emptyMessage="No data for this period."
+            sortField={reviewerSortField}
+            sortDir={reviewerSortDir}
+            onToggleSort={toggleReviewerSort}
+          />
 
-            {sortedReviewers.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-stone-200/80 bg-stone-50/40 py-12 text-center text-sm text-muted-foreground">
-                No data for this period.
-              </p>
-            ) : (
-              <div className="max-h-[min(640px,60vh)] overflow-y-auto overflow-x-auto rounded-lg border border-stone-200/80 bg-white/60">
-                <table className="w-full min-w-[24rem] border-collapse text-sm">
-                  <thead className="sticky top-0 z-[1] shadow-[0_1px_0_0_rgb(231_229_228)]">
-                    <tr className="border-b border-stone-200 bg-stone-50/95 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
-                      <th className="px-4 py-3">No.</th>
-                      <th className="px-4 py-3">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
-                          onClick={() => toggleReviewerSort('name')}
-                        >
-                          Reviewer
-                          <SortIcon<ReviewerSortField>
-                            field="name"
-                            active={reviewerSortField}
-                            dir={reviewerSortDir}
-                          />
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right tabular-nums">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
-                          onClick={() => toggleReviewerSort('segments_reviewed')}
-                        >
-                          Segments Reviewed
-                          <SortIcon<ReviewerSortField>
-                            field="segments_reviewed"
-                            active={reviewerSortField}
-                            dir={reviewerSortDir}
-                          />
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right tabular-nums">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
-                          onClick={() => toggleReviewerSort('edited_segments')}
-                        >
-                          Edited
-                          <SortIcon<ReviewerSortField>
-                            field="edited_segments"
-                            active={reviewerSortField}
-                            dir={reviewerSortDir}
-                          />
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right tabular-nums" title={REJECTION_RATE_FORMULA}>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
-                          onClick={() => toggleReviewerSort('rejection_rate')}
-                        >
-                          Rejected
-                          <SortIcon<ReviewerSortField>
-                            field="rejection_rate"
-                            active={reviewerSortField}
-                            dir={reviewerSortDir}
-                          />
-                        </button>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedReviewers.map((row, idx) => (
-                      <tr
-                        key={row.user_id ?? row.name}
-                        className="border-b border-stone-100 last:border-0 hover:bg-stone-50/80"
-                      >
-                        <td className="px-4 py-3 tabular-nums text-muted-foreground">{idx + 1}</td>
-                        <td className="max-w-[14rem] px-4 py-3 font-medium leading-snug text-foreground sm:max-w-none sm:whitespace-normal">
-                          <span className="break-words">{row.name}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-blue-700">
-                          {row.segments_reviewed.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-amber-600">
-                          {row.edited_segments.toLocaleString()}{' '}
-                          <span
-                            className="text-muted-foreground"
-                            title={REVIEWER_EDITED_RATE_FORMULA}
-                          >
-                            ({editedRate(row.edited_segments, row.segments_reviewed).toFixed(1)}%)
-                          </span>
-                        </td>
-                        <td
-                          className="px-4 py-3 text-right tabular-nums text-red-600"
-                          title={REJECTION_RATE_FORMULA}
-                        >
-                          {row.rejection_count.toLocaleString()}{' '}
-                          <span className="text-muted-foreground">
-                            ({rejectionRate(row.segments_reviewed, row.rejection_count).toFixed(1)}%)
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="sticky bottom-0 bg-stone-50/95 shadow-[0_-1px_0_0_rgb(231_229_228)]">
-                    <tr className="border-t border-stone-200 text-xs font-semibold text-muted-foreground">
-                      <td className="px-4 py-3" colSpan={2}>Total</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-700">
-                        {reviewerTotal.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-amber-600">
-                        {reviewerEditedTotal.toLocaleString()}{' '}
-                        <span
-                          className="font-normal text-muted-foreground"
-                          title={REVIEWER_EDITED_RATE_FORMULA}
-                        >
-                          ({editedRate(reviewerEditedTotal, reviewerTotal).toFixed(1)}%)
-                        </span>
-                      </td>
-                      <td
-                        className="px-4 py-3 text-right tabular-nums font-semibold text-red-600"
-                        title={REJECTION_RATE_FORMULA}
-                      >
-                        {reviewerRejectedTotal.toLocaleString()}{' '}
-                        <span className="font-normal text-muted-foreground">
-                          ({rejectionRate(reviewerTotal, reviewerRejectedTotal).toFixed(1)}%)
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </section>
+          {selectedUserId && (
+            <ReviewerTable
+              rows={sortedReviewedByUser}
+              eyebrow={selectedUserName ? `Reviews By ${selectedUserName}` : 'Reviews By This User'}
+              heading={
+                selectedUserName
+                  ? `Segments Reviewed By ${selectedUserName}`
+                  : 'Segments They Reviewed'
+              }
+              emptyMessage={
+                selectedUserName
+                  ? `${selectedUserName} reviewed no segments in this period.`
+                  : 'No segments reviewed in this period.'
+              }
+              sortField={reviewerSortField}
+              sortDir={reviewerSortDir}
+              onToggleSort={toggleReviewerSort}
+            />
+          )}
         </div>
       )}
     </div>

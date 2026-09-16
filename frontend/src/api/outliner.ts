@@ -1207,6 +1207,8 @@ export interface ReviewerApprovedRow {
 export interface StatisticsData {
   annotators: AnnotatorApprovedRow[];
   reviewers: ReviewerApprovedRow[];
+  /** The filtered user's own review output. Empty without a user filter. */
+  reviewed_by_user?: ReviewerApprovedRow[];
 }
 
 export const getStatistics = async (

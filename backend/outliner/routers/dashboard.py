@@ -134,6 +134,9 @@ async def get_statistics(
     Annotator approved rule: status='approved' (no reviewed_by_id requirement).
     Reviewer approved rule: status='approved' AND reviewed_by_id set.
     Date window: reviewed_at on the segment.
+
+    With a user filter, the reviewer side splits into `reviewers` (who reviewed that
+    user's annotations) and `reviewed_by_user` (that user's own review output).
     """
     annotator_rows = get_annotator_approved_counts(
         db, start_date=start_date, end_date=end_date, user_id=user_id
@@ -141,9 +144,21 @@ async def get_statistics(
     reviewer_rows = get_reviewer_approved_counts(
         db, start_date=start_date, end_date=end_date, user_id=user_id
     )
+    reviewed_by_user_rows = (
+        get_reviewer_approved_counts(
+            db,
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user_id,
+            scope="by_reviewer",
+        )
+        if user_id
+        else []
+    )
     return StatisticsResponse(
         annotators=[AnnotatorApprovedRow(**r) for r in annotator_rows],
         reviewers=[ReviewerApprovedRow(**r) for r in reviewer_rows],
+        reviewed_by_user=[ReviewerApprovedRow(**r) for r in reviewed_by_user_rows],
     )
 
 

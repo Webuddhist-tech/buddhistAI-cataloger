@@ -840,6 +840,8 @@ class ReviewerApprovedRow(BaseModel):
 class StatisticsResponse(BaseModel):
     annotators: List[AnnotatorApprovedRow] = Field(default_factory=list)
     reviewers: List[ReviewerApprovedRow] = Field(default_factory=list)
+    # the filtered user's own review output; empty without a user filter
+    reviewed_by_user: List[ReviewerApprovedRow] = Field(default_factory=list)
 
 
 class ActiveBatchResponse(BaseModel):
