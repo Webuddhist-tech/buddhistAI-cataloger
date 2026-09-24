@@ -92,6 +92,7 @@ function Navigation() {
               >
                 Home
               </Link>
+              {/* Hidden for now: Texts and Persons are not shown in the Cataloger.
               <Link
                 to="/texts"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -114,6 +115,7 @@ function Navigation() {
               >
                 Persons
               </Link>
+              */}
               <Link
                 to="/outliner"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -124,6 +126,17 @@ function Navigation() {
                 style={getActiveStyle(location.pathname.startsWith('/outliner'))}
               >
                 Outliner
+              </Link>
+              <Link
+                to="/dedup"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  location.pathname.startsWith('/dedup')
+                    ? ''
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+                style={getActiveStyle(location.pathname.startsWith('/dedup'))}
+              >
+                Deduplicator
               </Link>
             </div>
           </div>

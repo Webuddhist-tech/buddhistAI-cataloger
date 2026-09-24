@@ -10,8 +10,9 @@ import PostHogPageViewTracker from './PostHogPageViewTracker';
 import ViewOnly from './pages/ViewOnly';
 
 // Lazy load page components
-const TextsPage = lazy(() => import('./pages/Text'));
-const PersonsPage = lazy(() => import('./pages/Person'));
+// Texts and Persons are hidden from the Cataloger for now; routes commented out below.
+// const TextsPage = lazy(() => import('./pages/Text'));
+// const PersonsPage = lazy(() => import('./pages/Person'));
 const TextInstances = lazy(() => import('./pages/TextInstances'));
 const Instance = lazy(() => import('./pages/Instance'));
 const Index = lazy(() => import('./pages/Index'));
@@ -26,6 +27,7 @@ const AlignmentWorkstationLazy = lazy(() =>
   import('@/features/aligner').then((m) => ({ default: m.AlignmentWorkstation }))
 );
 const OutlineDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Dashboard })));
+const DedupDashboardLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Dashboard })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -103,6 +105,7 @@ function App() {
               <AlignmentWorkstationLazy />
             </ProtectedRoute>
           } />
+          {/* Hidden for now: Texts and Persons are not shown in the Cataloger.
           <Route path="/texts" element={
             <ProtectedRoute>
               <TextsPage />
@@ -113,6 +116,7 @@ function App() {
               <PersonsPage />
             </ProtectedRoute>
           } />
+          */}
           <Route path="/texts/:text_id/instances" element={
             <ProtectedRoute>
               <TextInstances />
@@ -141,6 +145,11 @@ function App() {
           <Route path="/outliner" element={
             <ProtectedRoute>
               <OutlineDashboardLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup" element={
+            <ProtectedRoute>
+              <DedupDashboardLazy />
             </ProtectedRoute>
           } />
           {/* Before /outliner/:documentId, or "my-stats" is captured as a document id. */}

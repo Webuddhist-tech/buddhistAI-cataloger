@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 import { useLocalStorage } from "@/hooks/useLocalStorage"
 import {
-  BookOpen,
-  PersonStanding,
+  // BookOpen, PersonStanding: used only by the hidden Texts/Persons cards below.
+  // BookOpen,
+  // PersonStanding,
   Plus,
   Library,
+  CopyCheck,
   Users,
   Code2,
 } from "lucide-react"
@@ -56,6 +58,7 @@ const Index = () => {
       {/* Feature descriptions (informational only, no links) */}
       <section className="container mx-auto px-4 flex-1">
         <div className="max-w-6xl h-max  grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          {/* Hidden for now: Texts and Persons are not shown in the Cataloger.
           <Link
               to="/texts"
             >
@@ -92,6 +95,7 @@ const Index = () => {
             </div>
           </div>
           </Link>
+          */}
           <Link
               to="/outliner"
             >
@@ -105,6 +109,23 @@ const Index = () => {
               </h3>
               <p className="mt-1 text-sm text-gray-600">
                 {t("home.featureOutlinerDescription")}
+              </p>
+            </div>
+          </div>
+          </Link>
+          <Link
+              to="/dedup"
+            >
+          <div className="flex h-full items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200  hover:shadow-md">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border ">
+              <CopyCheck className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t("home.featureDeduplicatorTitle")}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600">
+                {t("home.featureDeduplicatorDescription")}
               </p>
             </div>
           </div>

@@ -55,6 +55,8 @@
     "featurePersonsDescription": "Authors, translators, and commentators. Manage person records and link them to texts.",
     "featureOutlinerTitle": "Outliner",
     "featureOutlinerDescription": "BDRC Outliner Cataloger for title and author.",
+    "featureDeduplicatorTitle": "Deduplicator",
+    "featureDeduplicatorDescription": "Review whether two texts are copies of the same work.",
     "statsCatalog": "Text Catalog",
     "statsPersons": "Contributors",
     "statsOpen": "Open Source",
