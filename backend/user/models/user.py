@@ -14,6 +14,7 @@ class UserRole(Enum):
 class Permissions(Enum):
     Outliner = "outliner"
     Cataloger = "cataloger"
+    Dedup = "dedup"
 
 class User(Base):
     __tablename__ = "users"

@@ -7,6 +7,7 @@ import uvicorn
 from cataloger.routers import ai, person, text, translation, annotation, bdrc, category, enum, tokenize, aligner_data, admin, segments
 from outliner.routers import router as outliner_router
 from outliner.routers.image_proxy import router as outliner_image_proxy_router
+from dedup.routers import router as dedup_router
 from settings.routers import (
     tenant_router,
     role_router,
@@ -105,6 +106,7 @@ app.include_router(ai.router, prefix="/ai", tags=["ai"])
 
 app.include_router(outliner_router, prefix="/outliner", tags=["outliner"])
 app.include_router(outliner_image_proxy_router, prefix="/outliner", tags=["outliner"])
+app.include_router(dedup_router, prefix="/dedup", tags=["dedup"])
 
 
 # Settings routes
@@ -126,6 +128,21 @@ def _start_bdrc_sync_worker():
 @app.on_event("shutdown")
 def _stop_bdrc_sync_worker():
     from outliner.controller.bdrc_sync_worker import stop_worker
+
+    stop_worker()
+
+
+@app.on_event("startup")
+def _start_dedup_sync_worker():
+    """Push queued dedup decisions to BDRC in the background."""
+    from dedup.sync_worker import start_worker
+
+    start_worker()
+
+
+@app.on_event("shutdown")
+def _stop_dedup_sync_worker():
+    from dedup.sync_worker import stop_worker
 
     stop_worker()
 

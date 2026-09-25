@@ -20,6 +20,7 @@ from outliner.models.outliner import (
     SegmentRejection,
     SegmentReview,
 )
+from dedup.models import DedupActiveTime, DedupAssignment, DedupDecision, DedupItem
 
 import os
 load_dotenv()

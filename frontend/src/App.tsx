@@ -10,8 +10,9 @@ import PostHogPageViewTracker from './PostHogPageViewTracker';
 import ViewOnly from './pages/ViewOnly';
 
 // Lazy load page components
-const TextsPage = lazy(() => import('./pages/Text'));
-const PersonsPage = lazy(() => import('./pages/Person'));
+// Texts and Persons are hidden from the Cataloger for now; routes commented out below.
+// const TextsPage = lazy(() => import('./pages/Text'));
+// const PersonsPage = lazy(() => import('./pages/Person'));
 const TextInstances = lazy(() => import('./pages/TextInstances'));
 const Instance = lazy(() => import('./pages/Instance'));
 const Index = lazy(() => import('./pages/Index'));
@@ -26,6 +27,14 @@ const AlignmentWorkstationLazy = lazy(() =>
   import('@/features/aligner').then((m) => ({ default: m.AlignmentWorkstation }))
 );
 const OutlineDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Dashboard })));
+// Batch list: kept for the admin dashboard; editors start straight at their own items.
+// const DedupDashboardLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Dashboard })));
+const DedupQueueLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Queue })));
+const DedupReviewLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Review })));
+const DedupAdminLayoutLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.DedupAdminLayout })));
+const DedupAdminOverviewLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminOverview })));
+const DedupAdminAnnotatorsLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAnnotators })));
+const DedupAdminAnnotatorLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAnnotator })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -103,6 +112,7 @@ function App() {
               <AlignmentWorkstationLazy />
             </ProtectedRoute>
           } />
+          {/* Hidden for now: Texts and Persons are not shown in the Cataloger.
           <Route path="/texts" element={
             <ProtectedRoute>
               <TextsPage />
@@ -113,6 +123,7 @@ function App() {
               <PersonsPage />
             </ProtectedRoute>
           } />
+          */}
           <Route path="/texts/:text_id/instances" element={
             <ProtectedRoute>
               <TextInstances />
@@ -141,6 +152,43 @@ function App() {
           <Route path="/outliner" element={
             <ProtectedRoute>
               <OutlineDashboardLazy />
+            </ProtectedRoute>
+          } />
+          {/* <Route path="/dedup/batches" element={
+            <ProtectedRoute>
+              <DedupDashboardLazy />
+            </ProtectedRoute>
+          } /> */}
+          <Route path="/dedup" element={
+            <ProtectedRoute>
+              <DedupQueueLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup/item/:itemId" element={
+            <ProtectedRoute>
+              <DedupReviewLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup-admin" element={<Navigate to="/dedup-admin/overview" replace />} />
+          <Route path="/dedup-admin/overview" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy>
+                <DedupAdminOverviewLazy />
+              </DedupAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup-admin/annotators" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy>
+                <DedupAdminAnnotatorsLazy />
+              </DedupAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup-admin/annotators/:userId" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy>
+                <DedupAdminAnnotatorLazy />
+              </DedupAdminLayoutLazy>
             </ProtectedRoute>
           } />
           {/* Before /outliner/:documentId, or "my-stats" is captured as a document id. */}
