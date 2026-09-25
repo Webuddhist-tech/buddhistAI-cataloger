@@ -12,6 +12,7 @@ from typing import Optional
 
 from core.database import SessionLocal
 from dedup import client
+from dedup.client import ReviewApiError
 from dedup.controller.dedup import bdrc_payload
 from dedup.repository import dedup_repository as repo
 
@@ -23,6 +24,13 @@ STALE_SWEEP_INTERVAL_SECONDS = 300
 
 _worker_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
+
+
+def _retriable(exc: Exception) -> bool:
+    """BDRC unreachable, busy or failing on its side: worth trying again later."""
+    if not isinstance(exc, ReviewApiError):
+        return False
+    return exc.status_code is None or exc.status_code >= 500 or exc.status_code == 429
 
 
 def _process_available() -> int:
@@ -44,7 +52,7 @@ def _process_available() -> int:
                 )
             except Exception as exc:  # any failure must schedule a retry
                 db.rollback()
-                repo.mark_sync_failed(db, decision.id, f"{type(exc).__name__}: {exc}")
+                repo.mark_sync_failed(db, decision.id, f"{type(exc).__name__}: {exc}", retriable=_retriable(exc))
                 logger.warning(
                     "dedup sync failed decision=%s item=%s attempts=%s error=%s",
                     decision.id, decision.item_id, decision.sync_attempts, exc,

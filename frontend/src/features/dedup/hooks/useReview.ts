@@ -2,11 +2,15 @@ import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   claimItems,
+  fetchAdminOverview,
+  fetchAnnotatorItems,
+  fetchAnnotators,
   fetchBatches,
   fetchDiff,
   fetchText,
   fetchItem,
   fetchMyItems,
+  reassignItems,
   saveDecision,
   type DecisionInput,
   type DiffGranularity,
@@ -26,6 +30,11 @@ const keys = {
   item: (itemId: number) => [...reviewQueryKeyRoot, 'item', itemId] as const,
   text: (mwId: string) => [...reviewQueryKeyRoot, 'text', mwId] as const,
   diff: (a: string, b: string, g: DiffGranularity) => [...reviewQueryKeyRoot, 'diff', a, b, g] as const,
+  adminRoot: [...reviewQueryKeyRoot, 'admin'] as const,
+  adminOverview: [...reviewQueryKeyRoot, 'admin', 'overview'] as const,
+  annotators: [...reviewQueryKeyRoot, 'admin', 'annotators'] as const,
+  annotatorItems: (userId: string, state: MyItemsState) =>
+    [...reviewQueryKeyRoot, 'admin', 'items', userId, state] as const,
 };
 
 export function useBatches() {
@@ -54,6 +63,9 @@ export function useMyItems(state: MyItemsState = 'all', batchId?: string) {
   return useQuery({
     queryKey: keys.myItems(state, batchId),
     queryFn: ({ signal }) => fetchMyItems(state, batchId, { signal }),
+    // An admin may move items at any time: reload on every visit and tab focus.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -129,5 +141,44 @@ export function useTextDiff(a: string | undefined, b: string | undefined, granul
     queryFn: ({ signal }) => fetchDiff(a!, b!, granularity, { signal }),
     enabled: Boolean(a && b) && enabled,
     staleTime: Infinity,
+  });
+}
+
+// Admin
+
+export function useAdminOverview() {
+  return useQuery({
+    queryKey: keys.adminOverview,
+    queryFn: ({ signal }) => fetchAdminOverview({ signal }),
+    staleTime: 0,
+  });
+}
+
+export function useAnnotators() {
+  return useQuery({
+    queryKey: keys.annotators,
+    queryFn: ({ signal }) => fetchAnnotators({ signal }),
+    staleTime: 0,
+  });
+}
+
+export function useAnnotatorItems(userId: string | undefined, state: MyItemsState) {
+  return useQuery({
+    queryKey: keys.annotatorItems(userId ?? '', state),
+    queryFn: ({ signal }) => fetchAnnotatorItems(userId!, state, { signal }),
+    enabled: Boolean(userId),
+    staleTime: 0,
+  });
+}
+
+export function useReassign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemIds, toUserId }: { itemIds: number[]; toUserId: string | null }) =>
+      reassignItems(itemIds, toUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.adminRoot });
+      queryClient.invalidateQueries({ queryKey: keys.myItemsRoot });
+    },
   });
 }

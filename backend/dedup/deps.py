@@ -30,10 +30,7 @@ def _parse_permissions(permissions_raw: str | None) -> list[str]:
         return [p.strip() for p in permissions_raw.split(",") if p.strip()]
 
 
-def require_dedup_access(
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> User:
-    """Validate the Auth0 bearer token and ensure the user may use the dedup tool."""
+def _user_from_token(creds: HTTPAuthorizationCredentials | None) -> User:
     if not creds or creds.scheme.lower() != "bearer" or not (creds.credentials or "").strip():
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization bearer token")
 
@@ -48,15 +45,37 @@ def require_dedup_access(
         user = db.query(User).filter(func.lower(User.email) == email).first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-        if DEDUP_PERMISSION not in _parse_permissions(user.permissions):
-            raise HTTPException(status_code=403, detail="No access to the Deduplicator")
-        role = (user.role or "user").strip().lower()
-        if role not in _ALLOWED_ROLES:
-            raise HTTPException(status_code=403, detail="Unauthorized")
         db.expunge(user)
         return user
     finally:
         db.close()
+
+
+def has_dedup_access(user: User) -> bool:
+    role = (user.role or "user").strip().lower()
+    return role in _ALLOWED_ROLES and DEDUP_PERMISSION in _parse_permissions(user.permissions)
+
+
+def require_dedup_access(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> User:
+    """Validate the Auth0 bearer token and ensure the user may use the dedup tool."""
+    user = _user_from_token(creds)
+    if DEDUP_PERMISSION not in _parse_permissions(user.permissions):
+        raise HTTPException(status_code=403, detail="No access to the Deduplicator")
+    if (user.role or "user").strip().lower() not in _ALLOWED_ROLES:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return user
+
+
+def require_dedup_admin(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> User:
+    """Admins manage the dedup work without needing the annotator permission themselves."""
+    user = _user_from_token(creds)
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Admins only")
+    return user
 
 
 def is_admin(user: User) -> bool:

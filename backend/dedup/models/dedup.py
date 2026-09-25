@@ -70,9 +70,21 @@ class DedupAssignment(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     assigned_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     assigned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    # With decided_at, gives time spent per pair (plan §10 budget, admin dashboard).
     first_opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DedupActiveTime(Base):
+    """Time one annotator spent working on one pair: on screen and in use, summed over
+    every visit (idle time is not counted). Kept per person, so a pair moved to someone
+    else keeps the first person's time. Task-time measurement for the plan (§10)."""
+
+    __tablename__ = "dedup_active_time"
+
+    item_id: Mapped[int] = mapped_column(Integer, ForeignKey("dedup_items.item_id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), primary_key=True, index=True)
+    seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 class DedupDecision(Base):

@@ -73,6 +73,12 @@ class AssignmentOut(BaseModel):
     assigned_at: datetime
     first_opened_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    active_seconds: int = 0
+
+
+class ActiveTimeIn(BaseModel):
+    # One visit's worth; capped so a stuck tab cannot add hours in one call.
+    seconds: int = Field(ge=1, le=3600)
 
 
 class ItemOut(BaseModel):
@@ -119,3 +125,57 @@ class ClaimOut(BaseModel):
 class SyncHealthOut(BaseModel):
     counts: dict[str, int]
     failed: list[dict[str, Any]]
+
+
+# --- admin ---------------------------------------------------------------------------
+
+class WorkCounts(BaseModel):
+    assigned: int = 0
+    done: int = 0
+    in_progress: int = 0
+    not_started: int = 0
+
+
+class AdminBatchOut(BaseModel):
+    batch_id: str
+    n_items: int = 0
+    created_at: Optional[datetime] = None
+    # BDRC's counts for the whole batch, by status.
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    # Handed out in the Cataloger, and how many of those are done.
+    assigned: int = 0
+    assigned_done: int = 0
+
+
+class AdminOverviewOut(BaseModel):
+    totals: WorkCounts
+    batches: list[AdminBatchOut]
+    # Current answer per decided item.
+    verdicts: dict[str, int]
+    abstention_reasons: dict[str, int]
+    issues: dict[str, int]
+    sync: SyncHealthOut
+
+
+class AnnotatorOut(WorkCounts):
+    user_id: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    picture: Optional[str] = None
+    has_access: bool = True
+    # Active time on screen: in total, and on average per answered pair.
+    total_active_seconds: int = 0
+    avg_active_seconds: Optional[float] = None
+    last_active: Optional[datetime] = None
+
+
+class ReassignIn(BaseModel):
+    item_ids: list[int] = Field(min_length=1, max_length=500)
+    # Another annotator's id, or null to release the items back to the pool.
+    to_user_id: Optional[str] = None
+
+
+class ReassignOut(BaseModel):
+    moved: list[int]
+    # Already answered (they stay with whoever answered) or no longer assigned.
+    skipped: list[int]

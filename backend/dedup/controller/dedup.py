@@ -36,6 +36,7 @@ def _item_view(
     item: DedupItem,
     decision: Optional[DedupDecision],
     assignment: Optional[DedupAssignment],
+    active_seconds: int = 0,
 ) -> ItemOut:
     return ItemOut(
         item_id=item.item_id,
@@ -57,6 +58,7 @@ def _item_view(
                 assigned_at=assignment.assigned_at,
                 first_opened_at=assignment.first_opened_at,
                 completed_at=assignment.completed_at,
+                active_seconds=active_seconds,
             )
             if assignment
             else None
@@ -68,8 +70,10 @@ def _views_for(db: Session, assignments: list[DedupAssignment]) -> list[ItemOut]
     ids = [a.item_id for a in assignments]
     items = repo.get_items(db, ids)
     decisions = repo.latest_decisions(db, ids)
+    owners = {a.user_id for a in assignments}
+    time = repo.active_seconds(db, next(iter(owners))) if len(owners) == 1 else repo.active_seconds(db)
     return [
-        _item_view(items[a.item_id], decisions.get(a.item_id), a)
+        _item_view(items[a.item_id], decisions.get(a.item_id), a, time.get((a.item_id, a.user_id), 0))
         for a in assignments
         if a.item_id in items
     ]
@@ -173,9 +177,11 @@ def my_items(db: Session, user: User, batch_id: Optional[str] = None, state: str
 
 # --- one item ------------------------------------------------------------------------
 
-def _load_owned(db: Session, user: User, item_id: int) -> tuple[DedupItem, DedupAssignment]:
+def _load_owned(
+    db: Session, user: User, item_id: int, *, lock: bool = False
+) -> tuple[DedupItem, DedupAssignment]:
     """The item and its assignment, if the user may see it (assignee or admin)."""
-    assignment = repo.get_assignment(db, item_id)
+    assignment = repo.get_assignment(db, item_id, lock=lock)
     item = repo.get_item(db, item_id)
     if assignment is None or item is None:
         raise HTTPException(status_code=404, detail=f"Item {item_id} is not assigned")
@@ -192,13 +198,19 @@ def get_item(db: Session, user: User, item_id: int) -> ItemOut:
     return _item_view(item, repo.latest_decision(db, item_id), assignment)
 
 
+def add_active_time(db: Session, user: User, item_id: int, seconds: int) -> None:
+    if not repo.add_active_seconds(db, item_id, user.id, seconds):
+        raise HTTPException(status_code=403, detail="This item is not assigned to you")
+    db.commit()
+
+
 def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> ItemOut:
     """Record a decision locally and queue it for BDRC.
 
     Fields not sent keep their previous value, the same as BDRC's partial PUT: flagging
     an issue does not wipe an earlier verdict, and omitting ``issues`` keeps the list.
     """
-    item, assignment = _load_owned(db, user, item_id)
+    item, assignment = _load_owned(db, user, item_id, lock=True)
     if assignment.user_id != user.id:
         raise HTTPException(status_code=403, detail="Only the assigned annotator can decide this item")
 

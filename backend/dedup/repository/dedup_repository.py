@@ -18,6 +18,7 @@ from dedup.models.dedup import (
     SYNC_RUNNING,
     SYNC_SUCCEEDED,
     SYNC_SUPERSEDED,
+    DedupActiveTime,
     DedupAssignment,
     DedupDecision,
     DedupItem,
@@ -91,10 +92,11 @@ def try_assign(db: Session, *, item_id: int, batch_id: str, user_id: str, assign
     return db.execute(stmt).first() is not None
 
 
-def get_assignment(db: Session, item_id: int) -> Optional[DedupAssignment]:
-    return db.execute(
-        select(DedupAssignment).where(DedupAssignment.item_id == item_id)
-    ).scalar_one_or_none()
+def get_assignment(db: Session, item_id: int, *, lock: bool = False) -> Optional[DedupAssignment]:
+    q = select(DedupAssignment).where(DedupAssignment.item_id == item_id)
+    if lock:  # serializes a save against an admin moving the same item
+        q = q.with_for_update()
+    return db.execute(q).scalar_one_or_none()
 
 
 def user_assignments(
@@ -124,6 +126,34 @@ def user_counts_by_batch(db: Session, user_id: str) -> dict[str, dict[str, int]]
         .group_by(DedupAssignment.batch_id)
     ).all()
     return {b: {"open": o, "done": d} for b, o, d in rows}
+
+
+def add_active_seconds(db: Session, item_id: int, user_id: str, seconds: int) -> bool:
+    """Add time to this user's total for the pair, only while the pair is theirs. The
+    add happens in the database, so visits sent at the same moment are both counted."""
+    holds = db.execute(
+        select(DedupAssignment.id).where(DedupAssignment.item_id == item_id, DedupAssignment.user_id == user_id)
+    ).first()
+    if holds is None:
+        return False
+    stmt = insert(DedupActiveTime).values(
+        item_id=item_id, user_id=user_id, seconds=seconds, updated_at=datetime.utcnow()
+    )
+    db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["item_id", "user_id"],
+            set_={"seconds": DedupActiveTime.seconds + stmt.excluded.seconds, "updated_at": stmt.excluded.updated_at},
+        )
+    )
+    return True
+
+
+def active_seconds(db: Session, user_id: Optional[str] = None) -> dict[tuple[int, str], int]:
+    """``{(item_id, user_id): seconds}``, for one user or everyone."""
+    q = select(DedupActiveTime.item_id, DedupActiveTime.user_id, DedupActiveTime.seconds)
+    if user_id is not None:
+        q = q.where(DedupActiveTime.user_id == user_id)
+    return {(i, u): s for i, u, s in db.execute(q).all()}
 
 
 def mark_opened(db: Session, assignment: DedupAssignment) -> None:
@@ -209,13 +239,18 @@ def mark_synced(db: Session, decision_id: str) -> None:
     db.commit()
 
 
-def mark_sync_failed(db: Session, decision_id: str, error: str) -> None:
-    """Schedule a retry, or give up once the backoff schedule is exhausted."""
+def mark_sync_failed(db: Session, decision_id: str, error: str, *, retriable: bool = False) -> None:
+    """Schedule the next try.
+
+    ``retriable`` (BDRC unreachable or erroring on its side): keep trying, every 6 hours
+    once the backoff schedule is used up, until it is delivered. Otherwise (BDRC
+    rejected the answer) give up after the schedule: retrying cannot fix it.
+    """
     d = db.get(DedupDecision, decision_id)
     if d is None:
         return
     d.last_error = error[:2000]
-    if d.sync_attempts >= MAX_ATTEMPTS:
+    if not retriable and d.sync_attempts >= MAX_ATTEMPTS:
         d.sync_state = SYNC_FAILED
         d.next_attempt_at = None
     else:
@@ -268,3 +303,89 @@ def sync_health(db: Session, limit: int = 50) -> dict[str, Any]:
             for d in failed
         ],
     }
+
+
+# --- admin -----------------------------------------------------------------------
+
+def assignment_counts_by_batch(db: Session) -> dict[str, dict[str, int]]:
+    """``{batch_id: {"assigned": n, "done": n}}`` across all annotators."""
+    rows = db.execute(
+        select(
+            DedupAssignment.batch_id,
+            func.count(),
+            func.count().filter(DedupAssignment.completed_at.is_not(None)),
+        ).group_by(DedupAssignment.batch_id)
+    ).all()
+    return {b: {"assigned": n, "done": d} for b, n, d in rows}
+
+
+def latest_decision_per_item(db: Session) -> list[DedupDecision]:
+    """The current decision of every decided item (older superseded rows ignored)."""
+    ranked = (
+        select(
+            DedupDecision.id,
+            func.row_number()
+            .over(
+                partition_by=DedupDecision.item_id,
+                order_by=(DedupDecision.decided_at.desc(), DedupDecision.created_at.desc()),
+            )
+            .label("rn"),
+        )
+    ).subquery()
+    return list(
+        db.execute(
+            select(DedupDecision).join(ranked, ranked.c.id == DedupDecision.id).where(ranked.c.rn == 1)
+        ).scalars().all()
+    )
+
+
+def last_decision_by_user(db: Session) -> dict[str, datetime]:
+    """Each annotator's latest saved answer (changing an answer counts as activity)."""
+    rows = db.execute(
+        select(DedupDecision.user_id, func.max(DedupDecision.decided_at)).group_by(DedupDecision.user_id)
+    ).all()
+    return {u: t for u, t in rows}
+
+
+def all_assignments(db: Session) -> list[DedupAssignment]:
+    return list(db.execute(select(DedupAssignment)).scalars().all())
+
+
+def reassign(db: Session, item_ids: list[int], to_user_id: str, admin_id: str) -> tuple[list[int], list[int]]:
+    """Move unfinished items to another annotator. Returns (moved, skipped).
+
+    Finished items are skipped: their decision belongs to whoever made it. The opened
+    time is reset so time spent is measured for the new annotator.
+    """
+    rows = db.execute(
+        select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids)).with_for_update()
+    ).scalars().all()
+    now = datetime.utcnow()
+    moved, skipped = [], []
+    for a in rows:
+        if a.completed_at is not None:
+            skipped.append(a.item_id)
+            continue
+        a.user_id = to_user_id
+        a.assigned_by = admin_id
+        a.assigned_at = now
+        a.first_opened_at = None
+        moved.append(a.item_id)
+    skipped += [i for i in item_ids if i not in {a.item_id for a in rows}]
+    return moved, skipped
+
+
+def release(db: Session, item_ids: list[int]) -> tuple[list[int], list[int]]:
+    """Return unfinished items to the pool (anyone's next claim can take them)."""
+    rows = db.execute(
+        select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids)).with_for_update()
+    ).scalars().all()
+    moved, skipped = [], []
+    for a in rows:
+        if a.completed_at is not None:
+            skipped.append(a.item_id)
+            continue
+        db.delete(a)
+        moved.append(a.item_id)
+    skipped += [i for i in item_ids if i not in {a.item_id for a in rows}]
+    return moved, skipped

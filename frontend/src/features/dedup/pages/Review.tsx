@@ -8,8 +8,9 @@ import CantAnswerDialog, { type CantAnswerStart } from '../components/CantAnswer
 import FullTextDialog, { type FullTextView } from '../components/FullTextDialog';
 import PreferredCopyDialog, { type PreferredChoice } from '../components/PreferredCopyDialog';
 import WitnessPanel from '../components/WitnessPanel';
+import { useActiveTimer } from '../hooks/useActiveTimer';
 import { useBatchName, useItem, useMyItems, useSaveDecision } from '../hooks/useReview';
-import { hasIssue, overlapNote, pct, verdictLabel } from '../utils';
+import { hasIssue, isDecided, overlapNote, pct, verdictLabel } from '../utils';
 
 const CONFIDENCE = [1, 2, 3, 4, 5];
 // The shared Button has no pointer cursor; added here to leave other features untouched.
@@ -41,6 +42,12 @@ export default function Review() {
 
   const item = itemQuery.data;
   const save = useSaveDecision();
+  // Only for the pair's own annotator (an admin viewing it is not doing the work).
+  const { commit: commitActiveTime } = useActiveTimer(
+    item?.item_id,
+    Boolean(item && loaded.some((i) => i.item_id === item.item_id)),
+    Boolean(item && (isDecided(item) || hasIssue(item))),
+  );
   const [confidence, setConfidence] = useState<number | null>(null);
   const [dialog, setDialog] = useState<CantAnswerStart | null>(null);
   const [fullText, setFullText] = useState<FullTextView | null>(null);
@@ -75,6 +82,7 @@ export default function Review() {
         // Confidence only means something alongside a verdict.
         ...(fields.verdict && confidence != null ? { confidence } : {}),
       };
+      commitActiveTime();
       try {
         await save.mutateAsync({ itemId: item.item_id, fields: body });
         advanceTimer.current = window.setTimeout(() => goTo(nextId), 250);
@@ -83,7 +91,7 @@ export default function Review() {
         throw e;
       }
     },
-    [item, confidence, save, goTo, nextId],
+    [item, confidence, save, goTo, nextId, commitActiveTime],
   );
 
   const decide = useCallback(

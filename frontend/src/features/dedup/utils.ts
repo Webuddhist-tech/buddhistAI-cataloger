@@ -57,3 +57,38 @@ export function sourceLabel(etextSource: string | null | undefined): string | nu
   if (!etextSource) return null;
   return SOURCE_LABEL[etextSource] ?? etextSource;
 }
+
+export const ABSTENTION_LABEL: Record<string, string> = {
+  insufficient_evidence: "Can't tell from what's shown",
+  genuinely_ambiguous: 'Genuinely ambiguous',
+  needs_image_or_metadata: 'Needs scans or catalogue details',
+  technical_failure: 'Text garbled or unreadable',
+  out_of_scope: 'Outside this review',
+};
+
+export const ISSUE_LABEL: Record<string, string> = {
+  author_conflict: 'Authors conflict',
+  wrong_author: 'Author is wrong',
+  undersegmented: 'One text holds several works',
+  oversegmented: 'One work split across documents',
+  convention: 'Divided at different places',
+  anthology_suspected: 'Looks like an anthology',
+  source_dup: 'Passage repeated inside a text',
+  other: 'Other problem',
+};
+
+/** 75 -> "1 min 15 s". */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return '—';
+  const s = Math.round(seconds);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ${s % 60} s`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`);
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}

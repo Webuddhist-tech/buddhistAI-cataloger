@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Eye } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Eye, Settings } from 'lucide-react';
+import { useUser } from '@/hooks/useUser';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ const STATUS_STYLE: Record<RowStatus, string> = {
 export default function Queue() {
   const navigate = useNavigate();
   const batchName = useBatchName();
+  const { user } = useUser();
   const [state, setState] = useState<MyItemsState>('all');
   const [q, setQ] = useState('');
 
@@ -87,14 +89,23 @@ export default function Queue() {
             Review whether two texts are copies of the same work.
           </p>
         </div>
+        <div className="flex w-full gap-2 sm:w-auto">
+        {user?.role === 'admin' && (
+          <Button asChild variant="outline" className="cursor-pointer">
+            <Link to="/dedup-admin">
+              <Settings className="h-4 w-4" /> Admin
+            </Link>
+          </Button>
+        )}
         <Button
-          className="w-full cursor-pointer sm:w-auto"
+          className="flex-1 cursor-pointer sm:flex-none"
           onClick={assignWork}
           disabled={claim.isPending || myOpen > 0}
           title={myOpen > 0 ? 'Finish your current items first' : undefined}
         >
           {claim.isPending ? 'Assigning…' : 'Assign me work'}
         </Button>
+        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

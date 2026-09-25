@@ -67,6 +67,7 @@ export interface ItemAssignment {
   assigned_at: string;
   first_opened_at: string | null;
   completed_at: string | null;
+  active_seconds: number;
 }
 
 export interface ReviewItem {
@@ -144,6 +145,16 @@ export function fetchItem(itemId: number, opts?: { signal?: AbortSignal }) {
   return request<ReviewItem>(`/items/${itemId}`, { signal: opts?.signal });
 }
 
+/** `keepalive` lets the request finish while the page is closing. */
+export async function addActiveTime(itemId: number, seconds: number, keepalive = false) {
+  await fetchWithAccessToken(`${BASE}/items/${itemId}/active-time`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ seconds }),
+    keepalive,
+  });
+}
+
 export function saveDecision(itemId: number, body: DecisionInput) {
   return request<ReviewItem>(`/items/${itemId}/decision`, {
     method: 'POST',
@@ -187,4 +198,74 @@ export function fetchText(mwId: string, opts?: { signal?: AbortSignal }) {
 export function fetchDiff(a: string, b: string, granularity: DiffGranularity = 'syllable', opts?: { signal?: AbortSignal }) {
   const q = new URLSearchParams({ a, b, granularity });
   return request<TextDiff>(`/diff?${q}`, { signal: opts?.signal });
+}
+
+// Admin (role admin).
+
+export interface WorkCounts {
+  assigned: number;
+  done: number;
+  in_progress: number;
+  not_started: number;
+}
+
+export interface AdminBatch {
+  batch_id: string;
+  n_items: number;
+  created_at: string | null;
+  status_counts: Record<string, number>;
+  assigned: number;
+  assigned_done: number;
+}
+
+export interface SyncHealth {
+  counts: Record<string, number>;
+  failed: { decision_id: string; item_id: number; user_id: string; attempts: number; last_error: string | null; updated_at: string | null }[];
+}
+
+export interface AdminOverview {
+  totals: WorkCounts;
+  batches: AdminBatch[];
+  verdicts: Record<string, number>;
+  abstention_reasons: Record<string, number>;
+  issues: Record<string, number>;
+  sync: SyncHealth;
+}
+
+export interface Annotator extends WorkCounts {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  picture: string | null;
+  has_access: boolean;
+  total_active_seconds: number;
+  avg_active_seconds: number | null;
+  last_active: string | null;
+}
+
+export interface ReassignResult {
+  moved: number[];
+  skipped: number[];
+}
+
+export function fetchAdminOverview(opts?: { signal?: AbortSignal }) {
+  return request<AdminOverview>('/admin/overview', { signal: opts?.signal });
+}
+
+export function fetchAnnotators(opts?: { signal?: AbortSignal }) {
+  return request<Annotator[]>('/admin/annotators', { signal: opts?.signal });
+}
+
+export function fetchAnnotatorItems(userId: string, state: MyItemsState, opts?: { signal?: AbortSignal }) {
+  return request<ReviewItem[]>(`/admin/annotators/${encodeURIComponent(userId)}/items?state=${state}`, {
+    signal: opts?.signal,
+  });
+}
+
+/** `toUserId` null releases the items back to the pool. */
+export function reassignItems(itemIds: number[], toUserId: string | null) {
+  return request<ReassignResult>('/admin/reassign', {
+    method: 'POST',
+    body: JSON.stringify({ item_ids: itemIds, to_user_id: toUserId }),
+  });
 }

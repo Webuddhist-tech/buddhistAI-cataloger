@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import LanguageSelector from '@/components/formComponent/LanguageSelector';
 import { useUI } from '@/context/UIContext';
-import { Settings } from 'lucide-react';
+import { ChevronDown, Settings } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { Button } from '@/components/ui/button';
 import AvatarWrapper from '@/components/AvatarWrapper';
@@ -14,6 +14,7 @@ function Navigation() {
   const { brandIconUrl, primaryColor } = useUI();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const {user:userFromDb} = useUser();
   const hexToRgb = (hex: string) => {
@@ -55,6 +56,12 @@ function Navigation() {
 
   const isActive = (path: string) => location.pathname === path;
   const isAdminOrReviewer = userFromDb?.role === 'admin' || userFromDb?.role === 'reviewer';
+  // Admin areas this user can open: the Outliner's (admins and reviewers) and the
+  // Deduplicator's (admins). With both, "Admin" expands; with one, it links straight there.
+  const adminAreas = [
+    ...(isAdminOrReviewer ? [{ to: '/outliner-admin', label: 'Outliner' }] : []),
+    ...(userFromDb?.role === 'admin' ? [{ to: '/dedup-admin', label: 'Deduplicator' }] : []),
+  ];
   const primaryRgb = hexToRgb(primaryColor);
   const getActiveStyle = (isActiveLink: boolean) => {
     if (!isActiveLink || !primaryRgb) return undefined;
@@ -205,14 +212,43 @@ function Navigation() {
                     </svg>
                     Profile
                   </Link>
-                  {isAdminOrReviewer && (
+                  {adminAreas.length === 1 && (
                     <Link
-                      to="/outliner-admin"
+                      to={adminAreas[0].to}
+                      onClick={() => setIsMenuOpen(false)}
                       className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       <Settings className="w-4 h-4" />
                       Admin
                     </Link>
+                  )}
+                  {adminAreas.length > 1 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setAdminOpen((o) => !o)}
+                        aria-expanded={adminOpen}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Admin
+                        <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 transition-transform ${adminOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {adminOpen &&
+                        adminAreas.map((area) => (
+                          <Link
+                            key={area.to}
+                            to={area.to}
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              setAdminOpen(false);
+                            }}
+                            className="flex items-center py-2 pl-11 pr-4 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                          >
+                            {area.label}
+                          </Link>
+                        ))}
+                    </div>
                   )}
                   <Link
                     to="/settings"
