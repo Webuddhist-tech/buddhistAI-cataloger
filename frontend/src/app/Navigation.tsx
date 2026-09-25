@@ -44,6 +44,12 @@ function Navigation() {
     };
   }, [isMenuOpen]);
 
+  // On an admin page, the menu opens with the Admin section already expanded.
+  const onAdminPage = /^\/(outliner|dedup)-admin(\/|$)/.test(location.pathname);
+  useEffect(() => {
+    if (isMenuOpen) setAdminOpen(onAdminPage);
+  }, [isMenuOpen, onAdminPage]);
+
   const handleLogout = () => {
     logout({
       logoutParams: {
@@ -235,19 +241,27 @@ function Navigation() {
                         <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 transition-transform ${adminOpen ? 'rotate-180' : ''}`} />
                       </button>
                       {adminOpen &&
-                        adminAreas.map((area) => (
-                          <Link
-                            key={area.to}
-                            to={area.to}
-                            onClick={() => {
-                              setIsMenuOpen(false);
-                              setAdminOpen(false);
-                            }}
-                            className="flex items-center py-2 pl-11 pr-4 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                          >
-                            {area.label}
-                          </Link>
-                        ))}
+                        adminAreas.map((area) => {
+                          const current =
+                            location.pathname === area.to || location.pathname.startsWith(`${area.to}/`);
+                          return (
+                            <Link
+                              key={area.to}
+                              to={area.to}
+                              aria-current={current ? 'page' : undefined}
+                              onClick={() => {
+                                setIsMenuOpen(false);
+                                setAdminOpen(false);
+                              }}
+                              className={`flex items-center py-2 pl-11 pr-4 text-sm transition-colors ${
+                                current ? 'font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                              }`}
+                              style={getActiveStyle(current)}
+                            >
+                              {area.label}
+                            </Link>
+                          );
+                        })}
                     </div>
                   )}
                   <Link

@@ -94,15 +94,15 @@ export default function AdminAnnotator() {
       <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
         {person ? <Person a={person} /> : <div className="h-8" />}
         {person && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-            <span>
-              <strong className="tabular-nums text-gray-900">{person.done}</strong> answered
+          <div className="flex flex-wrap gap-2 text-sm">
+            <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">
+              <strong className="tabular-nums">{person.done}</strong> answered
             </span>
-            <span>
-              <strong className="tabular-nums text-amber-700">{person.in_progress}</strong> opened
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">
+              <strong className="tabular-nums">{person.in_progress}</strong> opened
             </span>
-            <span>
-              <strong className="tabular-nums text-gray-900">{person.not_started}</strong> not opened
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
+              <strong className="tabular-nums">{person.not_started}</strong> not opened
             </span>
           </div>
         )}

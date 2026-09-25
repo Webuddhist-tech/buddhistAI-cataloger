@@ -97,12 +97,23 @@ export function useItem(itemId: number | undefined) {
   const alreadyOpened = Boolean(fromList?.assignment?.first_opened_at);
   return useQuery({
     queryKey: keys.item(itemId ?? 0),
-    queryFn: ({ signal }) => fetchItem(itemId!, { signal }),
+    queryFn: async ({ signal }) => {
+      const opened = await fetchItem(itemId!, { signal });
+      // Only the opening time is copied, so the list shows "In progress" right away.
+      queryClient.setQueriesData<ReviewItem[]>({ queryKey: keys.myItemsRoot }, (data) =>
+        data?.map((it) =>
+          it.item_id === opened.item_id && it.assignment && opened.assignment
+            ? { ...it, assignment: { ...it.assignment, first_opened_at: opened.assignment.first_opened_at } }
+            : it,
+        ),
+      );
+      return opened;
+    },
     enabled: valid && !alreadyOpened,
-    initialData: fromList,
-    // A list copy counts as old, so a first opening still reaches the backend once;
-    // after that the item stays cached (saves update it in place).
-    initialDataUpdatedAt: 0,
+    // Shown at once while the first opening is recorded. Unlike initialData it is not
+    // cached, so it cannot stop that request from being sent.
+    placeholderData: fromList,
+    // After that the item stays cached (saves update it in place).
     staleTime: Infinity,
   });
 }
