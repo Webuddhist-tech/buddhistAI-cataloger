@@ -27,7 +27,10 @@ const AlignmentWorkstationLazy = lazy(() =>
   import('@/features/aligner').then((m) => ({ default: m.AlignmentWorkstation }))
 );
 const OutlineDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Dashboard })));
-const DedupDashboardLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Dashboard })));
+// Batch list: kept for the admin dashboard; editors start straight at their own items.
+// const DedupDashboardLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Dashboard })));
+const DedupQueueLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Queue })));
+const DedupReviewLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.Review })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -147,9 +150,19 @@ function App() {
               <OutlineDashboardLazy />
             </ProtectedRoute>
           } />
-          <Route path="/dedup" element={
+          {/* <Route path="/dedup/batches" element={
             <ProtectedRoute>
               <DedupDashboardLazy />
+            </ProtectedRoute>
+          } /> */}
+          <Route path="/dedup" element={
+            <ProtectedRoute>
+              <DedupQueueLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup/item/:itemId" element={
+            <ProtectedRoute>
+              <DedupReviewLazy />
             </ProtectedRoute>
           } />
           {/* Before /outliner/:documentId, or "my-stats" is captured as a document id. */}

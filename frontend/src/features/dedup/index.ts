@@ -1,1 +1,1 @@
-export { Dashboard } from './pages'
+export { Dashboard, Queue, Review } from './pages'
