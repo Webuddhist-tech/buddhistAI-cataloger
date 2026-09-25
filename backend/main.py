@@ -1,6 +1,9 @@
 import sys
 import os
 from fastapi import FastAPI,Response
+from fastapi.responses import JSONResponse
+from sqlalchemy import text as sql_text
+from core.database import engine
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import uvicorn
@@ -150,6 +153,18 @@ def _stop_dedup_sync_worker():
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the FastAPI backend"}
+
+
+@app.get("/health")
+def health():
+    """Liveness + DB check for the uptime cron: 200 when the DB answers, 503 otherwise."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(sql_text("SET LOCAL statement_timeout = 5000"))
+            conn.execute(sql_text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "error", "db": "unreachable"})
+    return {"status": "ok", "db": "ok"}
 
 if __name__ == "__main__":
     uvicorn.run(

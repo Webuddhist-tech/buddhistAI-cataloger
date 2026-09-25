@@ -13,7 +13,9 @@ engine = create_engine(
     echo=SQLALCHEMY_ECHO,  # Only log SQL in development
     pool_pre_ping=True,  # Verify connections before using
     pool_size=10,  # Connection pool size
-    max_overflow=20  # Max overflow connections
+    max_overflow=20,  # Max overflow connections
+    # Fail fast when the DB is unreachable instead of hanging request threads forever
+    connect_args={"connect_timeout": 10},
 )
 SessionLocal = sessionmaker[Session](
     bind=engine,
