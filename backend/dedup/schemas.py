@@ -28,8 +28,6 @@ IssueKind = Literal[
     "source_dup",
     "other",
 ]
-# `finalized` = decided (BDRC consumes these); `flagged` = issue reported, left undecided.
-DecisionStatus = Literal["finalized", "flagged"]
 
 
 class IssueIn(BaseModel):
@@ -39,7 +37,11 @@ class IssueIn(BaseModel):
 
 
 class DecisionIn(BaseModel):
-    """What the review UI sends when an annotator decides or flags an item.
+    """What the review UI sends when an annotator answers an item.
+
+    Every item ends with a verdict; issues (plan §5 ``issue``) are data problems
+    reported alongside it, never instead of it. ``issues`` alone adds to an item that
+    already has a verdict.
 
     ``issues`` is the item's full issue list (BDRC replaces the list on every write).
     Leave it out to keep the issues already recorded; the same goes for
@@ -51,12 +53,11 @@ class DecisionIn(BaseModel):
     confidence: Optional[int] = Field(default=None, ge=1, le=5)
     issues: Optional[list[IssueIn]] = None
     partner_payload: Optional[dict[str, Any]] = None
-    status: Optional[DecisionStatus] = None
 
     @model_validator(mode="after")
     def _consistent(self) -> "DecisionIn":
-        if self.verdict is None and not self.issues:
-            raise ValueError("send a verdict, or at least one issue")
+        if self.verdict is None and "issues" not in self.model_fields_set:
+            raise ValueError("send a verdict, or issues for an item that already has one")
         # Plan §5: CHECK ((verdict = 'not_sure') = (abstention_reason IS NOT NULL)).
         if self.verdict == "not_sure" and self.abstention_reason is None:
             raise ValueError("verdict 'not_sure' needs an abstention_reason")
@@ -64,8 +65,6 @@ class DecisionIn(BaseModel):
             raise ValueError("abstention_reason is only allowed with verdict 'not_sure'")
         if self.confidence is not None and self.verdict is None:
             raise ValueError("confidence is only allowed with a verdict")
-        if self.status == "finalized" and self.verdict is None:
-            raise ValueError("status 'finalized' needs a verdict")
         return self
 
 

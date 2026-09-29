@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronsUpDown, Columns2, Rows2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { DiffGranularity, WitnessCard } from '../api/review';
-import { buildDiffRows, foldRows, type DiffRow, type Piece } from '../diffRows';
+import { buildDiffRows, foldRows, withoutNewlines, type DiffRow, type Piece } from '../diffRows';
 import { useFullText, useTextDiff } from '../hooks/useReview';
 import { SourceBadge, WitnessMeta } from './SourceBadge';
 
@@ -166,11 +166,16 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
     typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'unified' : 'split',
   );
   const diff = useTextDiff(a.mw_id, b.mw_id, granularity);
-  const rows = useMemo(() => buildDiffRows(diff.data?.diff ?? []), [diff.data]);
+  // Line breaks are page layout, not text: dropped except in the line-by-line view.
+  const chunks = useMemo(() => {
+    const raw = diff.data?.diff ?? [];
+    return diff.data?.granularity === 'line' ? raw : withoutNewlines(raw);
+  }, [diff.data]);
+  const rows = useMemo(() => buildDiffRows(chunks), [chunks]);
   const blocks = useMemo(() => foldRows(rows), [rows]);
   // Each side numbered on its own: a row only one copy has gets no number on the other.
   const nums = useMemo(() => numberRows(rows), [rows]);
-  const changes = useMemo(() => (diff.data?.diff ?? []).filter((c) => c[0] !== 0).length, [diff.data]);
+  const changes = useMemo(() => chunks.filter((c) => c[0] !== 0).length, [chunks]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

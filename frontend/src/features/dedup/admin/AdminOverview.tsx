@@ -8,7 +8,8 @@ import InfoTip from './InfoTip';
 // BDRC statuses in the batch bars. Anything else BDRC reports is grouped as "other".
 const BDRC_STATUS = [
   { key: 'finalized', label: 'Answered', bar: 'bg-green-500', dot: 'bg-green-500' },
-  { key: 'flagged', label: 'Data problem', bar: 'bg-amber-400', dot: 'bg-amber-400' },
+  // Older answers that reported a problem without a verdict; new answers are always finalized.
+  { key: 'flagged', label: 'Problem, no answer yet', bar: 'bg-amber-400', dot: 'bg-amber-400' },
   { key: 'other', label: 'Other', bar: 'bg-sky-400', dot: 'bg-sky-400' },
   { key: 'new', label: 'Not answered yet', bar: 'bg-gray-200', dot: 'bg-gray-300' },
 ] as const;
@@ -36,7 +37,7 @@ export default function AdminOverview() {
             <Stat icon={<Inbox className="h-4 w-4" />} label="Given out" value={o.totals.assigned}
               tip="Pairs annotators have taken with “Assign me work”, or that an admin gave them." />
             <Stat icon={<CheckCircle2 className="h-4 w-4" />} label="Answered" value={o.totals.done} tone="green"
-              tip="Answered (same, different, …) or reported as a data problem." />
+              tip="Answered: same, different, contains, or can't answer. A reported data problem comes with an answer." />
             <Stat icon={<Hourglass className="h-4 w-4" />} label="Opened" value={o.totals.in_progress} tone="amber"
               tip="The annotator opened the pair but has not answered yet." />
             <Stat icon={<CircleDashed className="h-4 w-4" />} label="Not opened" value={o.totals.not_started}

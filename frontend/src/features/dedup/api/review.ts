@@ -76,7 +76,7 @@ export interface ReviewItem {
   kind: string;
   subject: { a_mw?: string; b_mw?: string } & Record<string, unknown>;
   evidence: PairEvidence;
-  // 'new' until this user decides; then 'finalized' or 'flagged'.
+  // 'new' until this user answers; then 'finalized' ('flagged' only on older issue-only answers).
   status: string;
   verdict: string | null;
   abstention_reason: string | null;
@@ -98,14 +98,14 @@ export interface ClaimResult {
 
 export type MyItemsState = 'open' | 'done' | 'all';
 
-// The backend fills in annotator_id and decided_at; fields left out keep their value.
+// The backend fills in status, annotator_id and decided_at; fields left out keep their
+// value. `issues` without a verdict only works once the item has one.
 export interface DecisionInput {
   verdict?: string | null;
   abstention_reason?: string | null;
   confidence?: number | null;
   issues?: ReviewIssue[] | null;
   partner_payload?: Record<string, unknown> | null;
-  status?: 'finalized' | 'flagged';
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

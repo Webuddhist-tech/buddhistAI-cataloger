@@ -348,10 +348,18 @@ export default function AdminAnnotator() {
 }
 
 function ItemStatus({ item }: Readonly<{ item: ReviewItem }>) {
-  if (isDecided(item) || hasIssue(item)) {
+  if (isDecided(item)) {
     return (
       <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-        {item.verdict ? verdictLabel(item.verdict) : 'Issue flagged'}
+        {verdictLabel(item.verdict!)}
+        {hasIssue(item) && ' · problem reported'}
+      </span>
+    );
+  }
+  if (hasIssue(item)) {
+    return (
+      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+        Problem reported · needs an answer
       </span>
     );
   }
