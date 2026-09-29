@@ -229,7 +229,8 @@ export default function Review() {
       {authorConflict && (
         <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <strong>These two share a title but list different authors.</strong> The author data cannot
-          settle this, so if the texts look the same, flag it as an issue rather than guessing.
+          settle this: judge by the texts, then use &ldquo;Report a data problem&rdquo; to report
+          &ldquo;Authors conflict&rdquo;.
         </div>
       )}
 
@@ -264,100 +265,113 @@ export default function Review() {
         ref={barRef}
         className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur"
       >
-        <div className="mx-auto grid max-w-7xl grid-cols-2 items-center gap-2 px-4 py-3 sm:flex sm:flex-wrap sm:px-6 lg:px-8">
-          <Button
-            variant="outline"
-            className={`${PTR} ${
-              isChosen('same')
-                ? 'border-green-600 bg-green-600 text-white hover:bg-green-700 hover:text-white'
-                : 'border-green-300 text-green-700 hover:bg-green-50'
-            }`}
-            onClick={() => decide('same')}
-            disabled={save.isPending}
-            aria-pressed={isChosen('same')}
-          >
-            {tick('same')} Same work <Kbd>J</Kbd>
-          </Button>
-          <Button
-            variant="outline"
-            className={`${PTR} ${
-              isChosen('different')
-                ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 hover:text-white'
-                : 'border-red-300 text-red-700 hover:bg-red-50'
-            }`}
-            onClick={() => decide('different')}
-            disabled={save.isPending}
-            aria-pressed={isChosen('different')}
-          >
-            {tick('different')} Different <Kbd>F</Kbd>
-          </Button>
-          <Button
-            variant="outline"
-            className={`${PTR} ${isChosen('contains', 'part_of') ? CHOSEN_NEUTRAL : ''}`}
-            onClick={() => setDialog('contains')}
-            disabled={save.isPending}
-            aria-pressed={isChosen('contains', 'part_of')}
-          >
-            {tick('contains', 'part_of')} Contains / part-of <Kbd>C</Kbd>
-          </Button>
-          <Button
-            variant="outline"
-            className={`${PTR} ${isChosen('not_sure') ? CHOSEN_NEUTRAL : ''}`}
-            onClick={() => setDialog('default')}
-            disabled={save.isPending}
-            aria-pressed={isChosen('not_sure')}
-          >
-            {tick('not_sure')} Can&rsquo;t answer <Kbd>Space</Kbd>
-          </Button>
-          <div className="col-span-2 flex items-center justify-center gap-1 sm:ml-2 sm:justify-start">
-            <span className="mr-1 text-[11px] uppercase tracking-wide text-gray-500">Confidence</span>
+        {/* Status strip: what is saved for this pair, and its data problems. Shown once there is something to say. */}
+        {(answered || problems.length > 0 || save.isPending) && (
+          <div className="border-b border-gray-100 bg-gray-50/80">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-xs sm:px-6 lg:px-8">
+              {save.isPending ? (
+                <span className="text-gray-500">Saving…</span>
+              ) : (
+                recorded && (
+                  <span className="inline-flex items-center gap-1.5 text-gray-600">
+                    <Check className="h-3.5 w-3.5 text-green-600" />
+                    Saved <span className="font-medium text-gray-900">{recorded}</span>
+                  </span>
+                )
+              )}
+              {problems.map((p, i) => (
+                <span
+                  key={`${p}-${i}`}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-800"
+                >
+                  <Flag className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{p}</span>
+                </span>
+              ))}
+              {!answered && problems.length > 0 && <span className="text-amber-800">Needs an answer</span>}
+              {answered && (
+                <button
+                  type="button"
+                  onClick={reportProblem}
+                  disabled={save.isPending}
+                  className={`${PTR} ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-gray-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50`}
+                  title="Add a data problem to this answer"
+                >
+                  <Flag className="h-3.5 w-3.5" />
+                  {problems.length ? 'Report another problem' : 'Report a data problem'}
+                  <Kbd>X</Kbd>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:px-8">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button
+              variant="outline"
+              className={`${PTR} ${
+                isChosen('same')
+                  ? 'border-green-600 bg-green-600 text-white hover:bg-green-700 hover:text-white'
+                  : 'border-green-300 text-green-700 hover:bg-green-50'
+              }`}
+              onClick={() => decide('same')}
+              disabled={save.isPending}
+              aria-pressed={isChosen('same')}
+            >
+              {tick('same')} Same work <Kbd>J</Kbd>
+            </Button>
+            <Button
+              variant="outline"
+              className={`${PTR} ${
+                isChosen('different')
+                  ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 hover:text-white'
+                  : 'border-red-300 text-red-700 hover:bg-red-50'
+              }`}
+              onClick={() => decide('different')}
+              disabled={save.isPending}
+              aria-pressed={isChosen('different')}
+            >
+              {tick('different')} Different <Kbd>F</Kbd>
+            </Button>
+            <Button
+              variant="outline"
+              className={`${PTR} ${isChosen('contains', 'part_of') ? CHOSEN_NEUTRAL : ''}`}
+              onClick={() => setDialog('contains')}
+              disabled={save.isPending}
+              aria-pressed={isChosen('contains', 'part_of')}
+            >
+              {tick('contains', 'part_of')} Contains / part-of <Kbd>C</Kbd>
+            </Button>
+            <Button
+              variant="outline"
+              className={`${PTR} ${isChosen('not_sure') ? CHOSEN_NEUTRAL : ''}`}
+              onClick={() => setDialog('default')}
+              disabled={save.isPending}
+              aria-pressed={isChosen('not_sure')}
+            >
+              {tick('not_sure')} Can&rsquo;t answer <Kbd>Space</Kbd>
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 sm:justify-start lg:ml-auto">
+            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Confidence</span>
             {CONFIDENCE.map((n) => (
               <button
                 key={n}
                 onClick={() => setConfidence(confidence === n ? null : n)}
-                className={`h-8 w-8 cursor-pointer rounded border text-sm tabular-nums sm:h-7 sm:w-7 ${
+                className={`h-9 w-9 cursor-pointer rounded-md border text-sm tabular-nums ${
                   confidence === n
                     ? 'border-gray-900 bg-gray-900 text-white'
                     : 'border-gray-300 text-gray-600 hover:border-gray-500'
                 }`}
                 title={`Confidence ${n} of 5`}
+                aria-pressed={confidence === n}
               >
                 {n}
               </button>
             ))}
           </div>
-
-          <span className="col-span-2 text-center text-sm empty:hidden sm:ml-auto sm:text-right">
-            {save.isPending && <span className="text-gray-400">Saving…</span>}
-            {!save.isPending && recorded && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                <Check className="h-3.5 w-3.5" /> Saved: {recorded}
-              </span>
-            )}
-            {!save.isPending && problems.length > 0 && (
-              <span
-                className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
-                title={problems.join(', ')}
-              >
-                <Flag className="h-3.5 w-3.5" /> {problems.length === 1 ? problems[0] : `${problems.length} problems reported`}
-              </span>
-            )}
-            {!save.isPending && !recorded && problems.length > 0 && (
-              <span className="ml-1.5 text-xs text-amber-800">Still needs an answer</span>
-            )}
-            {/* Appears once the pair is answered: a data problem rides along with the answer. */}
-            {!save.isPending && answered && (
-              <button
-                type="button"
-                onClick={reportProblem}
-                className="ml-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-gray-200 text-gray-500 align-middle hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-                title="Report a data problem (X)"
-                aria-label="Report a data problem"
-              >
-                <Flag className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </span>
         </div>
       </div>
 
