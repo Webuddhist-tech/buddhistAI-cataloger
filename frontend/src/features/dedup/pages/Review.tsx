@@ -10,7 +10,7 @@ import PreferredCopyDialog, { type PreferredChoice } from '../components/Preferr
 import WitnessPanel from '../components/WitnessPanel';
 import { useActiveTimer } from '../hooks/useActiveTimer';
 import { useBatchName, useItem, useMyItems, useSaveDecision } from '../hooks/useReview';
-import { hasIssue, isDecided, overlapNote, pct, verdictLabel } from '../utils';
+import { ISSUE_LABEL, hasIssue, isDecided, overlapNote, pct, verdictLabel } from '../utils';
 
 const CONFIDENCE = [1, 2, 3, 4, 5];
 // The shared Button has no pointer cursor; added here to leave other features untouched.
@@ -18,7 +18,7 @@ const PTR = 'cursor-pointer';
 const CHOSEN_NEUTRAL = 'border-gray-800 bg-gray-800 text-white hover:bg-gray-900 hover:text-white';
 
 // Keys (plan §11): J same, F different, C contains / part-of, Space can't answer,
-// X flag issue, 1-5 confidence, arrows move.
+// X report a data problem on the saved answer, 1-5 confidence, arrows move.
 export default function Review() {
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
@@ -46,7 +46,7 @@ export default function Review() {
   const { commit: commitActiveTime } = useActiveTimer(
     item?.item_id,
     Boolean(item && loaded.some((i) => i.item_id === item.item_id)),
-    Boolean(item && (isDecided(item) || hasIssue(item))),
+    Boolean(item && isDecided(item)),
   );
   const [confidence, setConfidence] = useState<number | null>(null);
   const [dialog, setDialog] = useState<CantAnswerStart | null>(null);
@@ -85,7 +85,8 @@ export default function Review() {
       commitActiveTime();
       try {
         await save.mutateAsync({ itemId: item.item_id, fields: body });
-        advanceTimer.current = window.setTimeout(() => goTo(nextId), 250);
+        // Reporting a problem on an answered pair stays here; answering moves on.
+        if (fields.verdict) advanceTimer.current = window.setTimeout(() => goTo(nextId), 250);
       } catch (e) {
         toast.error(`Could not save: ${(e as Error).message}`);
         throw e;
@@ -100,16 +101,22 @@ export default function Review() {
         setAskPreferred(true);
         return;
       }
-      submit({ verdict, status: 'finalized' }).catch(() => {});
+      submit({ verdict }).catch(() => {});
     },
     [submit],
   );
 
   const saveSame = useCallback(
-    (preferred: PreferredChoice) =>
-      submit({ verdict: 'same', status: 'finalized', partner_payload: { preferred_mw_id: preferred } }),
+    (preferred: PreferredChoice) => submit({ verdict: 'same', partner_payload: { preferred_mw_id: preferred } }),
     [submit],
   );
+
+  // A data problem is reported alongside an answer (plan §5), so the pair needs one first.
+  const answered = Boolean(item && isDecided(item));
+  const reportProblem = useCallback(() => {
+    if (answered) setDialog('issue');
+    else toast.info('Answer the pair first. Contains and Can’t answer can include a data problem directly.');
+  }, [answered]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -120,7 +127,7 @@ export default function Review() {
       if (k === 'j') decide('same');
       else if (k === 'f') decide('different');
       else if (k === 'c') setDialog('contains');
-      else if (k === 'x') setDialog('issue');
+      else if (k === 'x') reportProblem();
       else if (k === ' ') {
         e.preventDefault();
         setDialog('default');
@@ -130,7 +137,7 @@ export default function Review() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, fullText, askPreferred, decide, goTo, prevId, nextId]);
+  }, [dialog, fullText, askPreferred, decide, reportProblem, goTo, prevId, nextId]);
 
   if (itemQuery.isLoading) {
     return <div className="py-24 text-center text-gray-500">Loading item…</div>;
@@ -161,11 +168,8 @@ export default function Review() {
     if (preferred === null) preferredNote = ' · no preference';
     else preferredNote = preferred === cardA.mw_id ? ' · A is better' : ' · B is better';
   }
-  const recorded = item.verdict
-    ? verdictLabel(item.verdict) + preferredNote
-    : hasIssue(item)
-      ? `Issue flagged: ${item.issues!.at(-1)!.kind}`
-      : null;
+  const recorded = item.verdict ? verdictLabel(item.verdict) + preferredNote : null;
+  const problems = hasIssue(item) ? item.issues!.map((i) => ISSUE_LABEL[i.kind] ?? i.kind) : [];
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6" style={{ paddingBottom: barHeight + 24 }}>
@@ -305,10 +309,6 @@ export default function Review() {
           >
             {tick('not_sure')} Can&rsquo;t answer <Kbd>Space</Kbd>
           </Button>
-          <Button variant="ghost" className={`${PTR} col-span-2 sm:col-span-1`} onClick={() => setDialog('issue')} disabled={save.isPending}>
-            <Flag className="h-4 w-4" /> Flag issue <Kbd>X</Kbd>
-          </Button>
-
           <div className="col-span-2 flex items-center justify-center gap-1 sm:ml-2 sm:justify-start">
             <span className="mr-1 text-[11px] uppercase tracking-wide text-gray-500">Confidence</span>
             {CONFIDENCE.map((n) => (
@@ -333,6 +333,29 @@ export default function Review() {
               <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                 <Check className="h-3.5 w-3.5" /> Saved: {recorded}
               </span>
+            )}
+            {!save.isPending && problems.length > 0 && (
+              <span
+                className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
+                title={problems.join(', ')}
+              >
+                <Flag className="h-3.5 w-3.5" /> {problems.length === 1 ? problems[0] : `${problems.length} problems reported`}
+              </span>
+            )}
+            {!save.isPending && !recorded && problems.length > 0 && (
+              <span className="ml-1.5 text-xs text-amber-800">Still needs an answer</span>
+            )}
+            {/* Appears once the pair is answered: a data problem rides along with the answer. */}
+            {!save.isPending && answered && (
+              <button
+                type="button"
+                onClick={reportProblem}
+                className="ml-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-gray-200 text-gray-500 align-middle hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                title="Report a data problem (X)"
+                aria-label="Report a data problem"
+              >
+                <Flag className="h-3.5 w-3.5" />
+              </button>
             )}
           </span>
         </div>

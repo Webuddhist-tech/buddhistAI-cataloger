@@ -4,6 +4,44 @@ import type { DiffChunk } from './api/review';
 // Display only: a row ends at a newline both copies share, or at a shad once it is
 // long enough. Changed chunks are never split, so no text or highlight changes.
 
+const NEWLINES = /\r?\n/g;
+
+/**
+ * BDRC's chunks with every newline removed. OCR keeps the printed page's line breaks,
+ * which differ between editions: a newline only one copy has would otherwise count as
+ * a change nobody can see, and break the two sides at different places. Tibetan has no
+ * spaces between words, so the text on either side of a newline simply joins up.
+ * Chunks left empty go, a replace whose sides now match becomes equal, and neighbours
+ * of the same kind merge.
+ */
+export function withoutNewlines(chunks: DiffChunk[]): DiffChunk[] {
+  const out: DiffChunk[] = [];
+  const push = (c: DiffChunk) => {
+    const last = out.at(-1);
+    if (last && last[0] === c[0]) {
+      if (last[0] === 1 && c[0] === 1) out[out.length - 1] = [1, last[1] + c[1], last[2] + c[2]];
+      else out[out.length - 1] = [last[0], last[1] + c[1]] as DiffChunk;
+    } else {
+      out.push(c);
+    }
+  };
+  for (const c of chunks) {
+    if (c[0] === 1) {
+      const a = c[1].replace(NEWLINES, '');
+      const b = c[2].replace(NEWLINES, '');
+      if (a === b) {
+        if (a) push([0, a]);
+      } else if (!a) push([3, b]);
+      else if (!b) push([2, a]);
+      else push([1, a, b]);
+    } else {
+      const text = c[1].replace(NEWLINES, '');
+      if (text) push([c[0], text] as DiffChunk);
+    }
+  }
+  return out;
+}
+
 export type Piece = { text: string; changed: boolean };
 export type DiffRow = { a: Piece[]; b: Piece[]; changed: boolean };
 

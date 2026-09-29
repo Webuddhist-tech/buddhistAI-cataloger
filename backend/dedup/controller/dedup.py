@@ -207,8 +207,8 @@ def add_active_time(db: Session, user: User, item_id: int, seconds: int) -> None
 def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> ItemOut:
     """Record a decision locally and queue it for BDRC.
 
-    Fields not sent keep their previous value, the same as BDRC's partial PUT: flagging
-    an issue does not wipe an earlier verdict, and omitting ``issues`` keeps the list.
+    Fields not sent keep their previous value, the same as BDRC's partial PUT: reporting
+    an issue does not wipe the verdict, and omitting ``issues`` keeps the list.
     """
     item, assignment = _load_owned(db, user, item_id, lock=True)
     if assignment.user_id != user.id:
@@ -221,10 +221,13 @@ def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> It
         verdict = body.verdict
         abstention_reason = body.abstention_reason
         confidence = body.confidence
-    else:  # issue-only: keep whatever verdict was already recorded
-        verdict = prev.verdict if prev else None
-        abstention_reason = prev.abstention_reason if prev else None
-        confidence = prev.confidence if prev else None
+    elif prev is not None and prev.verdict is not None:  # issues only: keep the verdict
+        verdict = prev.verdict
+        abstention_reason = prev.abstention_reason
+        confidence = prev.confidence
+    else:
+        # Plan §5: an issue sits beside the decision, never replaces it.
+        raise HTTPException(status_code=422, detail="Answer the pair before reporting a data problem")
 
     issues: Optional[list[dict[str, Any]]]
     if "issues" in sent:
@@ -233,7 +236,6 @@ def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> It
         issues = prev.issues if prev else None
 
     partner_payload = body.partner_payload if "partner_payload" in sent else (prev.partner_payload if prev else None)
-    status = body.status or ("finalized" if body.verdict is not None else "flagged")
 
     now = datetime.utcnow()
     decision = repo.add_decision(
@@ -241,7 +243,9 @@ def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> It
         DedupDecision(
             item_id=item_id,
             user_id=user.id,
-            status=status,
+            # Every saved decision has a verdict, so BDRC always gets it finalized;
+            # any issues travel alongside in `issues`.
+            status="finalized",
             verdict=verdict,
             abstention_reason=abstention_reason,
             confidence=confidence,
@@ -251,7 +255,7 @@ def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> It
             evidence_hash=item.evidence_hash,
         ),
     )
-    # Decided or flagged, the annotator is done with it; it no longer blocks a new claim.
+    # Answered, so the annotator is done with it; it no longer blocks a new claim.
     if assignment.completed_at is None:
         assignment.completed_at = now
     db.commit()

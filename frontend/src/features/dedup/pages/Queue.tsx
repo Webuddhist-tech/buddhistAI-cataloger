@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Eye, Settings } from 'lucide-react';
+import { ArrowRight, Eye, Flag, Settings } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -20,10 +20,10 @@ const VERDICT_STYLE: Record<string, string> = {
   different: 'bg-red-50 text-red-700',
 };
 
-const isDone = (it: ReviewItem) => isDecided(it) || hasIssue(it);
+const isDone = (it: ReviewItem) => isDecided(it);
 
 type RowStatus = 'done' | 'progress' | 'new';
-// A flagged issue also counts as done; "In progress" = opened but not answered.
+// Done = answered (a reported problem alone is not an answer); "In progress" = opened but not answered.
 function rowStatus(it: ReviewItem): RowStatus {
   if (isDone(it)) return 'done';
   return it.assignment?.first_opened_at ? 'progress' : 'new';
@@ -296,21 +296,29 @@ export default function Queue() {
 }
 
 function DecisionBadge({ item }: { item: ReviewItem }) {
+  const problem = hasIssue(item) && (
+    <span title="Data problem reported">
+      <Flag className="inline h-3.5 w-3.5 text-amber-600" aria-label="Data problem reported" />
+    </span>
+  );
   if (item.verdict) {
     return (
-      <span
-        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-          VERDICT_STYLE[item.verdict] ?? 'bg-gray-100 text-gray-700'
-        }`}
-      >
-        {verdictLabel(item.verdict)}
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            VERDICT_STYLE[item.verdict] ?? 'bg-gray-100 text-gray-700'
+          }`}
+        >
+          {verdictLabel(item.verdict)}
+        </span>
+        {problem}
       </span>
     );
   }
-  if (hasIssue(item)) {
+  if (problem) {
     return (
       <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-        Issue flagged
+        Problem reported · needs an answer
       </span>
     );
   }
