@@ -16,7 +16,7 @@ from dedup.client import ReviewApiError
 from dedup.controller.adjudication import annotations
 from dedup.controller.dedup import _views_for, bdrc_error
 from dedup.deps import can_adjudicate, can_annotate, has_dedup_access
-from dedup.models.dedup import DedupAssignment
+from dedup.models.dedup import SETTING_REVIEW_MODE, DedupAssignment
 from dedup.repository import dedup_repository as repo
 from dedup.schemas import (
     AdjudicationReassignIn,
@@ -28,6 +28,8 @@ from dedup.schemas import (
     ItemOut,
     ReassignIn,
     ReassignOut,
+    SettingsIn,
+    SettingsOut,
     SyncHealthOut,
     WorkCounts,
 )
@@ -225,3 +227,26 @@ def reassign_adjudications(db: Session, admin: User, body: AdjudicationReassignI
     db.commit()
     logger.info("dedup admin=%s adjudications to=%s items=%s skipped=%s", admin.id, body.to_user_id, moved, skipped)
     return ReassignOut(moved=moved, skipped=skipped)
+
+
+# --- settings ----------------------------------------------------------------------
+
+def settings(db: Session) -> SettingsOut:
+    s = repo.get_setting(db, SETTING_REVIEW_MODE)
+    if s is None:
+        return SettingsOut()
+    who = db.get(User, s.updated_by) if s.updated_by else None
+    return SettingsOut(
+        review_mode=s.value,
+        updated_by=s.updated_by,
+        updated_by_name=(who.name or who.email) if who else None,
+        updated_at=s.updated_at,
+    )
+
+
+def update_settings(db: Session, admin: User, body: SettingsIn) -> SettingsOut:
+    """Takes effect on the next "Assign me work"; pairs already handed out keep theirs."""
+    repo.set_setting(db, SETTING_REVIEW_MODE, body.review_mode, admin.id)
+    db.commit()
+    logger.info("dedup admin=%s review_mode=%s", admin.id, body.review_mode)
+    return settings(db)

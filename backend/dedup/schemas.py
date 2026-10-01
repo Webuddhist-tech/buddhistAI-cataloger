@@ -256,6 +256,20 @@ class ReassignIn(BaseModel):
     from_user_id: Optional[str] = None
 
 
+class SettingsOut(BaseModel):
+    """Deduplicator-wide settings. ``review_mode``: how pairs handed out from now on are
+    reviewed; pairs already handed out keep theirs."""
+
+    review_mode: Literal["single", "double"] = "double"
+    updated_by: Optional[str] = None
+    updated_by_name: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class SettingsIn(BaseModel):
+    review_mode: Literal["single", "double"]
+
+
 class AdjudicationReassignIn(BaseModel):
     item_ids: list[int] = Field(min_length=1, max_length=500)
     # An adjudicator's id, or null to put the pairs back in the queue for anyone.

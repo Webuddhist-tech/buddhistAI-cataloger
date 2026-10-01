@@ -35,6 +35,8 @@ from dedup.schemas import (
     PairOut,
     ReassignIn,
     ReassignOut,
+    SettingsIn,
+    SettingsOut,
     SyncHealthOut,
 )
 from user.models.user import User
@@ -247,6 +249,22 @@ def admin_reassign_adjudications(
 ):
     """Hand unsettled disputed pairs to another adjudicator, or back to the queue (to_user_id null)."""
     return admin_ctrl.reassign_adjudications(db, admin, body)
+
+
+@admin_router.get("/settings", response_model=SettingsOut)
+def admin_settings(db: Session = Depends(get_db)):
+    """Deduplicator-wide settings, e.g. whether new pairs get single or double review."""
+    return admin_ctrl.settings(db)
+
+
+@admin_router.put("/settings", response_model=SettingsOut)
+def admin_update_settings(
+    body: SettingsIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_dedup_admin),
+):
+    """Change the review mode for pairs handed out from now on."""
+    return admin_ctrl.update_settings(db, admin, body)
 
 
 @admin_router.get("/sync-health", response_model=SyncHealthOut)

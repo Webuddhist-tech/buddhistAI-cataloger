@@ -14,16 +14,19 @@ import {
   fetchItem,
   fetchMyItems,
   fetchPair,
+  fetchSettings,
   reassignAdjudications,
   reassignItems,
   saveAdjudication,
   saveDecision,
+  updateSettings,
   type AdjudicationInput,
   type AdjudicationItem,
   type DecisionInput,
   type DiffGranularity,
   type MyItemsState,
   type ReviewItem,
+  type ReviewMode,
 } from '../api/review';
 import { batchNames } from '../utils';
 
@@ -48,6 +51,7 @@ const keys = {
   annotatorItems: (userId: string, state: MyItemsState) =>
     [...reviewQueryKeyRoot, 'admin', 'items', userId, state] as const,
   adminAdjudications: (state: MyItemsState) => [...reviewQueryKeyRoot, 'admin', 'adjudications', state] as const,
+  settings: [...reviewQueryKeyRoot, 'admin', 'settings'] as const,
 };
 
 export function useBatches() {
@@ -285,6 +289,27 @@ export function useReassignAdjudications() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.adminRoot });
       queryClient.invalidateQueries({ queryKey: keys.adjudicationRoot });
+    },
+  });
+}
+
+/** Deduplicator-wide settings (admins only). */
+export function useDedupSettings(enabled = true) {
+  return useQuery({
+    queryKey: keys.settings,
+    queryFn: ({ signal }) => fetchSettings({ signal }),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+export function useUpdateReviewMode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: ReviewMode) => updateSettings(mode),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(keys.settings, updated);
+      queryClient.invalidateQueries({ queryKey: keys.adminRoot });
     },
   });
 }

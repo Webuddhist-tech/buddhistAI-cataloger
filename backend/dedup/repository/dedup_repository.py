@@ -14,6 +14,7 @@ from dedup.models.dedup import (
     MAX_ATTEMPTS,
     MODE_DOUBLE,
     MODE_SINGLE,
+    SETTING_REVIEW_MODE,
     ROLE_ADJUDICATOR,
     ROLE_ANNOTATOR,
     RETRY_BACKOFF_SECONDS,
@@ -27,6 +28,7 @@ from dedup.models.dedup import (
     DedupAssignment,
     DedupDecision,
     DedupItem,
+    DedupSetting,
 )
 
 
@@ -60,15 +62,38 @@ def get_item(db: Session, item_id: int, *, lock: bool = False) -> Optional[Dedup
     return db.get(DedupItem, item_id)
 
 
-def make_double_if_fresh(db: Session, item_id: int) -> None:
-    """A single-review item released before anyone answered it is claimed afresh under
-    double review."""
+def set_mode_if_fresh(db: Session, item_id: int, mode: str) -> None:
+    """Give an item nobody has answered the review mode it is being claimed under (an
+    item released unanswered is claimed afresh)."""
     db.execute(
         DedupItem.__table__.update()
-        .where(DedupItem.item_id == item_id, DedupItem.review_mode == MODE_SINGLE)
+        .where(DedupItem.item_id == item_id, DedupItem.review_mode != mode)
         .where(~select(DedupDecision.id).where(DedupDecision.item_id == item_id).exists())
-        .values(review_mode=MODE_DOUBLE)
+        .values(review_mode=mode)
     )
+
+
+# --- settings --------------------------------------------------------------------
+
+def get_setting(db: Session, key: str) -> Optional[DedupSetting]:
+    return db.get(DedupSetting, key)
+
+
+def review_mode(db: Session) -> str:
+    """How pairs handed out now are reviewed; double unless an admin chose single."""
+    s = get_setting(db, SETTING_REVIEW_MODE)
+    return s.value if s is not None else MODE_DOUBLE
+
+
+def set_setting(db: Session, key: str, value: str, user_id: str) -> DedupSetting:
+    stmt = insert(DedupSetting).values(key=key, value=value, updated_by=user_id, updated_at=datetime.utcnow())
+    db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["key"],
+            set_={"value": stmt.excluded.value, "updated_by": stmt.excluded.updated_by, "updated_at": stmt.excluded.updated_at},
+        )
+    )
+    return db.get(DedupSetting, key, populate_existing=True)
 
 
 def get_items(db: Session, item_ids: Iterable[int]) -> dict[int, DedupItem]:

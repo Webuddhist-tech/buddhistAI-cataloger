@@ -378,6 +378,27 @@ export function reassignItems(itemIds: number[], toUserId: string | null, fromUs
   });
 }
 
+export type ReviewMode = 'single' | 'double';
+
+/** Deduplicator-wide settings. `review_mode`: how pairs handed out from now on are reviewed. */
+export interface DedupSettings {
+  review_mode: ReviewMode;
+  updated_by: string | null;
+  updated_by_name: string | null;
+  updated_at: string | null;
+}
+
+export function fetchSettings(opts?: { signal?: AbortSignal }) {
+  return request<DedupSettings>('/admin/settings', { signal: opts?.signal });
+}
+
+export function updateSettings(reviewMode: ReviewMode) {
+  return request<DedupSettings>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ review_mode: reviewMode }),
+  });
+}
+
 export function fetchAdminAdjudications(state: MyItemsState, opts?: { signal?: AbortSignal }) {
   return request<AdminAdjudication[]>(`/admin/adjudications?state=${state}`, { signal: opts?.signal });
 }

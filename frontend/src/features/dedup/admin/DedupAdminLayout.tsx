@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Gavel, LayoutDashboard, Users } from 'lucide-react';
+import { AlertTriangle, Gavel, LayoutDashboard, Users } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
+import { useDedupSettings } from '../hooks/useReview';
 
 const LINKS = [
   { to: '/dedup-admin/overview', label: 'Overview', icon: LayoutDashboard },
@@ -11,6 +12,8 @@ const LINKS = [
 
 export default function DedupAdminLayout({ children }: Readonly<{ children: ReactNode }>) {
   const { user, isLoading } = useUser();
+  const settings = useDedupSettings(user?.role === 'admin');
+  const single = settings.data?.review_mode === 'single';
 
   if (isLoading) return null;
   if (user?.role !== 'admin') {
@@ -38,6 +41,19 @@ export default function DedupAdminLayout({ children }: Readonly<{ children: Reac
             </NavLink>
           ))}
         </nav>
+        {/* Easy to forget once switched: stays in sight on every admin page. */}
+        {single && (
+          <NavLink
+            to="/dedup-admin/overview"
+            className="mx-2 mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 md:mx-3"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <span>
+              Single review is on
+              <span className="block font-normal text-amber-800">New pairs get one annotator.</span>
+            </span>
+          </NavLink>
+        )}
       </aside>
       <main className="min-w-0 flex-1">{children}</main>
     </div>

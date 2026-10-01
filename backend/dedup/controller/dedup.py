@@ -142,8 +142,9 @@ def _claim_second_slots(db: Session, user: User, batch_id: Optional[str], need: 
     return claimed
 
 
-def _claim_from_batch(db: Session, user: User, batch_id: str, need: int) -> int:
-    """Take slot 1 on up to ``need`` pairs of ``batch_id`` nobody holds. Not committed."""
+def _claim_from_batch(db: Session, user: User, batch_id: str, need: int, mode: str) -> int:
+    """Take slot 1 on up to ``need`` pairs of ``batch_id`` nobody holds, reviewed in
+    ``mode``. Not committed."""
     claimed = 0
     offset = 0
     while claimed < need:
@@ -164,7 +165,7 @@ def _claim_from_batch(db: Session, user: User, batch_id: str, need: int) -> int:
             if row["item_id"] in taken:
                 continue
             repo.upsert_item(db, row)
-            repo.make_double_if_fresh(db, row["item_id"])
+            repo.set_mode_if_fresh(db, row["item_id"], mode)
             if repo.try_assign(
                 db, item_id=row["item_id"], batch_id=batch_id, user_id=user.id, assigned_by=user.id
             ):
@@ -191,8 +192,9 @@ def claim_items(
 
     Pairs waiting for a second annotator come first, picked at random, so pairs get
     finished rather than piling up half done. The rest are fresh pairs from the oldest
-    batch with unclaimed items, running into the next batch if it empties mid-claim. A
-    user who still has unfinished items gets those back instead.
+    batch with unclaimed items, running into the next batch if it empties mid-claim,
+    reviewed the way the admin set (single or double). A user who still has unfinished
+    items gets those back instead.
     """
     if not can_annotate(user):
         raise HTTPException(status_code=403, detail="Adjudicators settle disputed pairs and do not take annotation work")
@@ -203,8 +205,9 @@ def claim_items(
 
     claimed = _claim_second_slots(db, user, batch_id, size)
     if claimed < size:
+        mode = repo.review_mode(db)
         for bid in [batch_id] if batch_id else _batches_oldest_first():
-            claimed += _claim_from_batch(db, user, bid, size - claimed)
+            claimed += _claim_from_batch(db, user, bid, size - claimed, mode)
             if claimed >= size:
                 break
 

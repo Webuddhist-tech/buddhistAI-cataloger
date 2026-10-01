@@ -1,9 +1,10 @@
 import { useMemo, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, CircleDashed, Gavel, Hourglass, Inbox, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-import type { AdminBatch, DoubleReviewCounts, SyncHealth } from '../api/review';
-import { useAdminOverview } from '../hooks/useReview';
-import { ABSTENTION_LABEL, ISSUE_LABEL, RESOLUTION_LABEL, batchNames, verdictLabel } from '../utils';
+import type { AdminBatch, DoubleReviewCounts, ReviewMode, SyncHealth } from '../api/review';
+import { useAdminOverview, useDedupSettings, useUpdateReviewMode } from '../hooks/useReview';
+import { ABSTENTION_LABEL, ISSUE_LABEL, RESOLUTION_LABEL, batchNames, formatDateTime, verdictLabel } from '../utils';
 import InfoTip from './InfoTip';
 
 // BDRC statuses in the batch bars. Anything else BDRC reports is grouped as "other".
@@ -24,6 +25,8 @@ export default function AdminOverview() {
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <h1 className="text-2xl font-semibold text-gray-900">Progress</h1>
       <p className="mt-1 text-sm text-gray-600">Across all annotators</p>
+
+      <ReviewModeSwitch />
 
       {overview.isLoading && <div className="mt-6 h-40 animate-pulse rounded-xl bg-gray-100" />}
       {overview.error && (
@@ -72,6 +75,82 @@ export default function AdminOverview() {
         </>
       )}
     </div>
+  );
+}
+
+const MODES: { key: ReviewMode; label: string; help: string }[] = [
+  { key: 'single', label: 'Single review', help: 'One annotator per pair. Their answer is final and goes straight to BDRC.' },
+  {
+    key: 'double',
+    label: 'Double review',
+    help: 'Two annotators per pair. The same answer is final; otherwise an adjudicator decides.',
+  },
+];
+
+// How pairs handed out from now on are reviewed. Single while only one person annotates,
+// so answers still reach BDRC; double once there are two or more.
+function ReviewModeSwitch() {
+  const settings = useDedupSettings();
+  const update = useUpdateReviewMode();
+  const s = settings.data;
+  if (!s) return null;
+
+  const choose = async (mode: ReviewMode) => {
+    if (mode === s.review_mode) return;
+    try {
+      await update.mutateAsync(mode);
+      toast.success(`${mode === 'single' ? 'Single' : 'Double'} review is on for pairs handed out from now on`);
+    } catch (e) {
+      toast.error(`Could not change it: ${(e as Error).message}`);
+    }
+  };
+
+  return (
+    <section
+      className={`mt-6 rounded-xl border p-4 shadow-sm sm:p-5 ${
+        s.review_mode === 'single' ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white'
+      }`}
+    >
+      <h2 className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+        Review mode for new pairs
+        <InfoTip text="Applies to pairs handed out with “Assign me work” from now on. Pairs already handed out keep the mode they were given, so switching never changes work in progress." />
+      </h2>
+      {s.review_mode === 'single' && (
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-600" /> Single review is on. Switch back to double review once a
+          second annotator is working.
+        </p>
+      )}
+      <fieldset className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" disabled={update.isPending}>
+        <legend className="sr-only">Review mode for new pairs</legend>
+        {MODES.map((m) => (
+          <label
+            key={m.key}
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 ${
+              s.review_mode === m.key ? 'border-gray-900 ring-1 ring-gray-900' : 'border-gray-200 hover:border-gray-400'
+            }`}
+          >
+            <input
+              type="radio"
+              name="review-mode"
+              className="mt-1 cursor-pointer"
+              checked={s.review_mode === m.key}
+              onChange={() => choose(m.key)}
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">{m.label}</span>
+              <span className="block text-xs text-gray-600">{m.help}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {s.updated_at && (
+        <p className="mt-2 text-xs text-gray-500">
+          Last changed {formatDateTime(s.updated_at)}
+          {s.updated_by_name ? ` by ${s.updated_by_name}` : ''}
+        </p>
+      )}
+    </section>
   );
 }
 

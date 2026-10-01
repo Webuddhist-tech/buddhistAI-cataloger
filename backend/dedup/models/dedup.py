@@ -4,6 +4,7 @@
 * ``dedup_assignments``    which annotators an item belongs to (two slots per item)
 * ``dedup_decisions``      every decision, append-only, each with its own sync state
 * ``dedup_adjudications``  pairs whose two answers disagree, and who settles them
+* ``dedup_settings``       tool-wide settings an admin changes (e.g. review mode)
 
 Double review: two annotators answer each pair without seeing each other's answer. If
 their verdicts match, that verdict is final; otherwise the pair goes to an adjudicator,
@@ -24,6 +25,9 @@ from core.database import Base
 
 MODE_SINGLE = "single"
 MODE_DOUBLE = "double"
+REVIEW_MODES = (MODE_SINGLE, MODE_DOUBLE)
+# Setting: how pairs handed out from now on are reviewed. Unset means double.
+SETTING_REVIEW_MODE = "review_mode"
 SLOTS = (1, 2)
 
 ROLE_ANNOTATOR = "annotator"
@@ -170,3 +174,14 @@ class DedupAdjudication(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # sided_with_1 | sided_with_2 | new_label | unresolved (set with completed_at).
     resolution: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class DedupSetting(Base):
+    """One tool-wide setting, changed by an admin."""
+
+    __tablename__ = "dedup_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(String, nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
