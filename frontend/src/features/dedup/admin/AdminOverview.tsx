@@ -1,8 +1,9 @@
 import { useMemo, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, CircleDashed, Hourglass, Inbox } from 'lucide-react';
-import type { AdminBatch, SyncHealth } from '../api/review';
+import { AlertTriangle, CheckCircle2, CircleDashed, Gavel, Hourglass, Inbox, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import type { AdminBatch, DoubleReviewCounts, SyncHealth } from '../api/review';
 import { useAdminOverview } from '../hooks/useReview';
-import { ABSTENTION_LABEL, ISSUE_LABEL, batchNames, verdictLabel } from '../utils';
+import { ABSTENTION_LABEL, ISSUE_LABEL, RESOLUTION_LABEL, batchNames, verdictLabel } from '../utils';
 import InfoTip from './InfoTip';
 
 // BDRC statuses in the batch bars. Anything else BDRC reports is grouped as "other".
@@ -35,7 +36,7 @@ export default function AdminOverview() {
         <>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat icon={<Inbox className="h-4 w-4" />} label="Given out" value={o.totals.assigned}
-              tip="Pairs annotators have taken with “Assign me work”, or that an admin gave them." />
+              tip="Pairs annotators have taken with “Assign me work”, or that an admin gave them. Each pair is given to two annotators, so it counts twice." />
             <Stat icon={<CheckCircle2 className="h-4 w-4" />} label="Answered" value={o.totals.done} tone="green"
               tip="Answered: same, different, contains, or can't answer. A reported data problem comes with an answer." />
             <Stat icon={<Hourglass className="h-4 w-4" />} label="Opened" value={o.totals.in_progress} tone="amber"
@@ -43,6 +44,8 @@ export default function AdminOverview() {
             <Stat icon={<CircleDashed className="h-4 w-4" />} label="Not opened" value={o.totals.not_started}
               tip="Given to an annotator who has not opened it yet." />
           </div>
+
+          <DoubleReview d={o.double_review} />
 
           <Section title="Batches" tip="Batches of pairs prepared by BDRC. New batches appear here automatically.">
             <div className="space-y-4">
@@ -54,7 +57,7 @@ export default function AdminOverview() {
           </Section>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <Section title="Answers" className="mt-4" tip="The current answer for each pair.">
+            <Section title="Final answers" className="mt-4" tip="The answer BDRC has for each settled pair: the one both annotators agreed on, or the adjudicator's.">
               <Counts rows={o.verdicts} label={verdictLabel} empty="No answers yet." />
             </Section>
             <Section title="Couldn't answer" className="mt-4" tip="When annotators chose “Can't answer”, the reason they gave.">
@@ -69,6 +72,53 @@ export default function AdminOverview() {
         </>
       )}
     </div>
+  );
+}
+
+// Each pair goes to two annotators: the same answer is final, anything else goes to an
+// adjudicator.
+function DoubleReview({ d }: Readonly<{ d: DoubleReviewCounts }>) {
+  const rate = d.both_answered ? Math.round((d.agreed / d.both_answered) * 100) : null;
+  return (
+    <Section
+      title="Double review"
+      tip="Every pair is answered by two annotators. If they give the same answer it is final; otherwise an adjudicator decides."
+    >
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Stat icon={<Users className="h-4 w-4" />} label="Waiting for 2nd annotator" value={d.awaiting_second}
+          tip="Only one annotator holds these so far. The next person to click “Assign me work” gets them first." />
+        <Stat icon={<CheckCircle2 className="h-4 w-4" />} label="Agreed" value={d.agreed} tone="green"
+          tip="Both annotators gave the same answer, so it went to BDRC as final." />
+        <Stat icon={<Gavel className="h-4 w-4" />} label="Waiting for adjudication" value={d.adjudication_waiting} tone="amber"
+          tip="The annotators disagreed (or one could not answer). No adjudicator has opened these yet." />
+        <Stat icon={<Hourglass className="h-4 w-4" />} label="Being adjudicated" value={d.adjudication_in_progress} tone="amber"
+          tip="An adjudicator has opened these and not answered yet." />
+        <Stat icon={<CheckCircle2 className="h-4 w-4" />} label="Adjudicated" value={d.adjudicated} tone="green"
+          tip="Settled by an adjudicator and sent to BDRC." />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 border-t border-gray-100 pt-4 lg:grid-cols-2">
+        <div>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            Agreement
+            <InfoTip text="Of the pairs both annotators have answered, how many they answered the same." />
+          </div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{rate == null ? '—' : `${rate}%`}</div>
+          <div className="text-xs text-gray-500">
+            {d.agreed} of {d.both_answered} pairs answered by both
+          </div>
+          <Link to="/dedup-admin/adjudications" className="mt-2 inline-block text-sm font-medium text-blue-700 hover:text-blue-800">
+            See disputed pairs →
+          </Link>
+        </div>
+        <div>
+          <div className="mb-2 flex items-center gap-1 text-xs text-gray-500">
+            How disputes were settled
+            <InfoTip text="What the adjudicator decided, compared with the two annotators' answers." />
+          </div>
+          <Counts rows={d.resolutions} label={(k) => RESOLUTION_LABEL[k] ?? k} empty="None settled yet." />
+        </div>
+      </div>
+    </Section>
   );
 }
 

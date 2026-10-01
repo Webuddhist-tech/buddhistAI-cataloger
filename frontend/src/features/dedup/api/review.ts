@@ -64,6 +64,8 @@ export interface ReviewIssue {
 }
 
 export interface ItemAssignment {
+  // 1 or 2: each pair has two annotator slots.
+  slot: number;
   assigned_at: string;
   first_opened_at: string | null;
   completed_at: string | null;
@@ -88,6 +90,48 @@ export interface ReviewItem {
   // pending | running | succeeded | failed | superseded; null before any decision.
   sync_state: string | null;
   assignment: ItemAssignment | null;
+  // 'single' (answer is final) or 'double' (two annotators, then an adjudicator if they disagree).
+  review_mode: string;
+  // Both annotators have answered, so this answer can no longer change.
+  locked: boolean;
+}
+
+// Adjudication: pairs whose two annotators disagreed (or either said "can't answer").
+
+export interface AnnotatorAnswer {
+  // "Annotator 1" / "Annotator 2": unnamed and shuffled for the adjudicator.
+  label: string;
+  verdict: string | null;
+  abstention_reason: string | null;
+  confidence: number | null;
+  issues: ReviewIssue[] | null;
+  partner_payload: Record<string, unknown> | null;
+  decided_at: string | null;
+  // Only filled in for admins.
+  slot: number | null;
+  annotator_id: string | null;
+}
+
+export interface AdjudicationInfo {
+  created_at: string;
+  adjudicator_id: string | null;
+  reserved_at: string | null;
+  first_opened_at: string | null;
+  completed_at: string | null;
+  // sided_with_1 | sided_with_2 | new_label | unresolved, once settled.
+  resolution: string | null;
+  active_seconds: number;
+}
+
+/** A disputed pair. `verdict`, `confidence`, … are this adjudicator's own answer. */
+export interface AdjudicationItem extends ReviewItem {
+  note: string | null;
+  annotations: AnnotatorAnswer[];
+  adjudication: AdjudicationInfo;
+}
+
+export interface AdjudicationInput extends DecisionInput {
+  note?: string | null;
 }
 
 export interface ClaimResult {
@@ -162,6 +206,36 @@ export function saveDecision(itemId: number, body: DecisionInput) {
   });
 }
 
+export function fetchAdjudicationQueue(state: MyItemsState, opts?: { signal?: AbortSignal }) {
+  return request<AdjudicationItem[]>(`/adjudication/items?state=${state}`, { signal: opts?.signal });
+}
+
+/** Opening a disputed pair takes it, if nobody has yet. */
+export function fetchAdjudicationItem(itemId: number, opts?: { signal?: AbortSignal }) {
+  return request<AdjudicationItem>(`/adjudication/items/${itemId}`, { signal: opts?.signal });
+}
+
+export function saveAdjudication(itemId: number, body: AdjudicationInput) {
+  return request<AdjudicationItem>(`/adjudication/items/${itemId}/decision`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** A pair as the read-only shared page shows it: evidence only, never an answer. Opens
+ * for any logged-in account. */
+export interface SharedPair {
+  item_id: number;
+  batch_id: string;
+  kind: string;
+  subject: { a_mw?: string; b_mw?: string } & Record<string, unknown>;
+  evidence: PairEvidence;
+}
+
+export function fetchPair(itemId: number, opts?: { signal?: AbortSignal }) {
+  return request<SharedPair>(`/pairs/${itemId}`, { signal: opts?.signal });
+}
+
 // Full text and diff: read-only, passed through from BDRC.
 
 export interface FullText {
@@ -223,6 +297,16 @@ export interface SyncHealth {
   failed: { decision_id: string; item_id: number; user_id: string; attempts: number; last_error: string | null; updated_at: string | null }[];
 }
 
+export interface DoubleReviewCounts {
+  awaiting_second: number;
+  both_answered: number;
+  agreed: number;
+  adjudication_waiting: number;
+  adjudication_in_progress: number;
+  adjudicated: number;
+  resolutions: Record<string, number>;
+}
+
 export interface AdminOverview {
   totals: WorkCounts;
   batches: AdminBatch[];
@@ -230,6 +314,7 @@ export interface AdminOverview {
   abstention_reasons: Record<string, number>;
   issues: Record<string, number>;
   sync: SyncHealth;
+  double_review: DoubleReviewCounts;
 }
 
 export interface Annotator extends WorkCounts {
@@ -237,10 +322,32 @@ export interface Annotator extends WorkCounts {
   name: string | null;
   email: string | null;
   picture: string | null;
+  // admin | reviewer (shown as "Adjudicator") | annotator
+  role: string | null;
   has_access: boolean;
   total_active_seconds: number;
   avg_active_seconds: number | null;
   last_active: string | null;
+  // Double-review pairs where both annotators answered, and how many of those agreed.
+  paired: number;
+  agreed: number;
+  // Pairs this person settled as adjudicator.
+  adjudicated: number;
+}
+
+export interface AdminAdjudication {
+  item_id: number;
+  batch_id: string;
+  title_a: string | null;
+  title_b: string | null;
+  created_at: string;
+  adjudicator_id: string | null;
+  adjudicator_name: string | null;
+  reserved_at: string | null;
+  completed_at: string | null;
+  resolution: string | null;
+  verdict: string | null;
+  annotations: AnnotatorAnswer[];
 }
 
 export interface ReassignResult {
@@ -262,9 +369,22 @@ export function fetchAnnotatorItems(userId: string, state: MyItemsState, opts?: 
   });
 }
 
-/** `toUserId` null releases the items back to the pool. */
-export function reassignItems(itemIds: number[], toUserId: string | null) {
+/** `toUserId` null releases the items back to the pool. `fromUserId` picks whose slot
+ * moves, since a pair has two. */
+export function reassignItems(itemIds: number[], toUserId: string | null, fromUserId?: string) {
   return request<ReassignResult>('/admin/reassign', {
+    method: 'POST',
+    body: JSON.stringify({ item_ids: itemIds, to_user_id: toUserId, from_user_id: fromUserId ?? null }),
+  });
+}
+
+export function fetchAdminAdjudications(state: MyItemsState, opts?: { signal?: AbortSignal }) {
+  return request<AdminAdjudication[]>(`/admin/adjudications?state=${state}`, { signal: opts?.signal });
+}
+
+/** `toUserId` null puts the pairs back in the queue for any adjudicator. */
+export function reassignAdjudications(itemIds: number[], toUserId: string | null) {
+  return request<ReassignResult>('/admin/adjudications/reassign', {
     method: 'POST',
     body: JSON.stringify({ item_ids: itemIds, to_user_id: toUserId }),
   });

@@ -8,10 +8,14 @@ from typing import Any, Iterable, Optional
 
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from dedup.models.dedup import (
     MAX_ATTEMPTS,
+    MODE_DOUBLE,
+    MODE_SINGLE,
+    ROLE_ADJUDICATOR,
+    ROLE_ANNOTATOR,
     RETRY_BACKOFF_SECONDS,
     SYNC_FAILED,
     SYNC_PENDING,
@@ -19,6 +23,7 @@ from dedup.models.dedup import (
     SYNC_SUCCEEDED,
     SYNC_SUPERSEDED,
     DedupActiveTime,
+    DedupAdjudication,
     DedupAssignment,
     DedupDecision,
     DedupItem,
@@ -47,8 +52,23 @@ def upsert_item(db: Session, bdrc_item: dict[str, Any]) -> None:
     db.execute(stmt)
 
 
-def get_item(db: Session, item_id: int) -> Optional[DedupItem]:
+def get_item(db: Session, item_id: int, *, lock: bool = False) -> Optional[DedupItem]:
+    """``lock`` serializes the two annotators' saves on one pair, so the second answer
+    always sees the first."""
+    if lock:
+        return db.execute(select(DedupItem).where(DedupItem.item_id == item_id).with_for_update()).scalar_one_or_none()
     return db.get(DedupItem, item_id)
+
+
+def make_double_if_fresh(db: Session, item_id: int) -> None:
+    """A single-review item released before anyone answered it is claimed afresh under
+    double review."""
+    db.execute(
+        DedupItem.__table__.update()
+        .where(DedupItem.item_id == item_id, DedupItem.review_mode == MODE_SINGLE)
+        .where(~select(DedupDecision.id).where(DedupDecision.item_id == item_id).exists())
+        .values(review_mode=MODE_DOUBLE)
+    )
 
 
 def get_items(db: Session, item_ids: Iterable[int]) -> dict[int, DedupItem]:
@@ -71,32 +91,74 @@ def assigned_item_ids(db: Session, item_ids: Iterable[int]) -> set[int]:
     return set(rows)
 
 
-def try_assign(db: Session, *, item_id: int, batch_id: str, user_id: str, assigned_by: str) -> bool:
-    """Assign an item if nobody holds it yet. Returns False if someone else got it first.
+def try_assign(
+    db: Session, *, item_id: int, batch_id: str, user_id: str, assigned_by: str, slot: int = 1
+) -> bool:
+    """Give the user one slot on an item. Returns False if the slot was taken first or
+    the user already holds the item's other slot.
 
-    The unique constraint on ``item_id`` makes this safe when two annotators claim at
-    the same moment: exactly one insert wins.
+    The unique constraints on (item, slot) and (item, user) make this safe when two
+    annotators claim at the same moment: exactly one insert wins.
     """
     stmt = (
         insert(DedupAssignment)
         .values(
             item_id=item_id,
             batch_id=batch_id,
+            slot=slot,
             user_id=user_id,
             assigned_by=assigned_by,
             assigned_at=datetime.utcnow(),
         )
-        .on_conflict_do_nothing(constraint="uq_dedup_assignments_item_id")
+        .on_conflict_do_nothing()
         .returning(DedupAssignment.id)
     )
     return db.execute(stmt).first() is not None
 
 
-def get_assignment(db: Session, item_id: int, *, lock: bool = False) -> Optional[DedupAssignment]:
-    q = select(DedupAssignment).where(DedupAssignment.item_id == item_id)
+def open_second_slots(
+    db: Session, user_id: str, batch_id: Optional[str], limit: int
+) -> list[tuple[int, str, int]]:
+    """Double-review items held by exactly one other annotator, in random order, as
+    ``(item_id, batch_id, free_slot)``. Random so the same two people are not always
+    paired, which would make their agreement mean little."""
+    other = aliased(DedupAssignment)
+    q = (
+        select(DedupAssignment.item_id, DedupAssignment.batch_id, DedupAssignment.slot)
+        .join(DedupItem, DedupItem.item_id == DedupAssignment.item_id)
+        .where(
+            DedupItem.review_mode == MODE_DOUBLE,
+            DedupAssignment.user_id != user_id,
+            ~select(other.id).where(other.item_id == DedupAssignment.item_id, other.id != DedupAssignment.id).exists(),
+        )
+        .order_by(func.random())
+        .limit(limit)
+    )
+    if batch_id is not None:
+        q = q.where(DedupAssignment.batch_id == batch_id)
+    return [(i, b, 3 - s) for i, b, s in db.execute(q).all()]
+
+
+def get_assignment(db: Session, item_id: int, user_id: str, *, lock: bool = False) -> Optional[DedupAssignment]:
+    q = select(DedupAssignment).where(DedupAssignment.item_id == item_id, DedupAssignment.user_id == user_id)
     if lock:  # serializes a save against an admin moving the same item
         q = q.with_for_update()
     return db.execute(q).scalar_one_or_none()
+
+
+def assignments_for_items(db: Session, item_ids: Iterable[int]) -> list[DedupAssignment]:
+    ids = list(item_ids)
+    if not ids:
+        return []
+    return list(db.execute(select(DedupAssignment).where(DedupAssignment.item_id.in_(ids))).scalars().all())
+
+
+def item_assignments(db: Session, item_id: int) -> list[DedupAssignment]:
+    return list(
+        db.execute(select(DedupAssignment).where(DedupAssignment.item_id == item_id).order_by(DedupAssignment.slot))
+        .scalars()
+        .all()
+    )
 
 
 def user_assignments(
@@ -129,10 +191,13 @@ def user_counts_by_batch(db: Session, user_id: str) -> dict[str, dict[str, int]]
 
 
 def add_active_seconds(db: Session, item_id: int, user_id: str, seconds: int) -> bool:
-    """Add time to this user's total for the pair, only while the pair is theirs. The
+    """Add time to this user's total for the pair, only while the pair is theirs (as an
+    annotator, or as the adjudicator who took it). The
     add happens in the database, so visits sent at the same moment are both counted."""
     holds = db.execute(
         select(DedupAssignment.id).where(DedupAssignment.item_id == item_id, DedupAssignment.user_id == user_id)
+    ).first() or db.execute(
+        select(DedupAdjudication.item_id).where(DedupAdjudication.item_id == item_id, DedupAdjudication.user_id == user_id)
     ).first()
     if holds is None:
         return False
@@ -163,41 +228,99 @@ def mark_opened(db: Session, assignment: DedupAssignment) -> None:
 
 # --- decisions -----------------------------------------------------------------
 
-def latest_decision(db: Session, item_id: int) -> Optional[DedupDecision]:
+_NEWEST_FIRST = (DedupDecision.decided_at.desc(), DedupDecision.created_at.desc())
+
+
+def latest_decision(db: Session, item_id: int, user_id: str, role: str = ROLE_ANNOTATOR) -> Optional[DedupDecision]:
+    """This person's current answer on the item, in the given role."""
     return db.execute(
         select(DedupDecision)
-        .where(DedupDecision.item_id == item_id)
-        .order_by(DedupDecision.decided_at.desc(), DedupDecision.created_at.desc())
+        .where(DedupDecision.item_id == item_id, DedupDecision.user_id == user_id, DedupDecision.role == role)
+        .order_by(*_NEWEST_FIRST)
         .limit(1)
     ).scalar_one_or_none()
 
 
-def latest_decisions(db: Session, item_ids: Iterable[int]) -> dict[int, DedupDecision]:
+def latest_decisions(db: Session, item_ids: Iterable[int]) -> dict[tuple[int, str], DedupDecision]:
+    """``{(item_id, user_id): decision}``: each annotator's current answer. Kept per
+    person so one annotator never sees the other's answer."""
     ids = list(item_ids)
     if not ids:
         return {}
     rows = db.execute(
         select(DedupDecision)
-        .where(DedupDecision.item_id.in_(ids))
-        .order_by(DedupDecision.item_id, DedupDecision.decided_at.desc(), DedupDecision.created_at.desc())
+        .where(DedupDecision.item_id.in_(ids), DedupDecision.role == ROLE_ANNOTATOR)
+        .order_by(DedupDecision.item_id, *_NEWEST_FIRST)
     ).scalars().all()
-    out: dict[int, DedupDecision] = {}
+    out: dict[tuple[int, str], DedupDecision] = {}
     for d in rows:
-        out.setdefault(d.item_id, d)
+        out.setdefault((d.item_id, d.user_id), d)
     return out
 
 
-def add_decision(db: Session, decision: DedupDecision) -> DedupDecision:
-    """Append a decision and retire older unsent ones for the same item.
+def annotator_answers_for(db: Session, item_ids: Iterable[int]) -> dict[int, dict[int, DedupDecision]]:
+    """``{item_id: {slot: decision}}``: the current answer in each annotator slot that
+    has one. Only unanswered slots can be moved to someone else, so each answer belongs
+    to the slot its author holds."""
+    ids = list(item_ids)
+    slot_of = {(a.item_id, a.user_id): a.slot for a in assignments_for_items(db, ids)}
+    out: dict[int, dict[int, DedupDecision]] = {i: {} for i in ids}
+    for key, d in latest_decisions(db, ids).items():
+        if key in slot_of:
+            out[d.item_id][slot_of[key]] = d
+    return out
 
-    BDRC keeps one value per item, so only the newest decision needs pushing; an older
-    one still waiting would otherwise overwrite it if it happened to be sent later.
+
+def annotator_answers(db: Session, item_id: int) -> dict[int, DedupDecision]:
+    """``{slot: decision}`` for one item."""
+    return annotator_answers_for(db, [item_id])[item_id]
+
+
+def answered_pairs(db: Session) -> list[tuple[int, list[str]]]:
+    """Double-review pairs both annotators have answered, with who answered."""
+    rows = db.execute(
+        select(DedupDecision.item_id, DedupDecision.user_id)
+        .join(DedupItem, DedupItem.item_id == DedupDecision.item_id)
+        .where(DedupItem.review_mode == MODE_DOUBLE, DedupDecision.role == ROLE_ANNOTATOR)
+        .distinct()
+    ).all()
+    by_item: dict[int, list[str]] = {}
+    for item_id, uid in rows:
+        by_item.setdefault(item_id, []).append(uid)
+    return [(i, users) for i, users in by_item.items() if len(users) == 2]
+
+
+def answered_counts(db: Session, item_ids: Iterable[int]) -> dict[int, int]:
+    """How many annotators have answered each item."""
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(DedupDecision.item_id, func.count(func.distinct(DedupDecision.user_id)))
+        .where(DedupDecision.item_id.in_(ids), DedupDecision.role == ROLE_ANNOTATOR)
+        .group_by(DedupDecision.item_id)
+    ).all()
+    return dict(rows)
+
+
+def supersede_pending(db: Session, item_id: int) -> None:
+    """Retire unsent answers for the item before queuing a newer one.
+
+    BDRC keeps one value per item, so only the newest final answer needs pushing; an
+    older one still waiting would otherwise overwrite it if it happened to be sent later.
     """
     db.query(DedupDecision).filter(
-        DedupDecision.item_id == decision.item_id,
+        DedupDecision.item_id == item_id,
         DedupDecision.sync_state == SYNC_PENDING,
     ).update({DedupDecision.sync_state: SYNC_SUPERSEDED}, synchronize_session=False)
+
+
+def add_decision(db: Session, decision: DedupDecision) -> DedupDecision:
+    """Append a decision; if it is queued for BDRC, retire older unsent ones."""
+    if decision.sync_state == SYNC_PENDING:
+        supersede_pending(db, decision.item_id)
     db.add(decision)
+    db.flush()
     return decision
 
 
@@ -320,17 +443,15 @@ def assignment_counts_by_batch(db: Session) -> dict[str, dict[str, int]]:
 
 
 def latest_decision_per_item(db: Session) -> list[DedupDecision]:
-    """The current decision of every decided item (older superseded rows ignored)."""
+    """The current final answer of every settled item (older rows ignored)."""
     ranked = (
         select(
             DedupDecision.id,
             func.row_number()
-            .over(
-                partition_by=DedupDecision.item_id,
-                order_by=(DedupDecision.decided_at.desc(), DedupDecision.created_at.desc()),
-            )
+            .over(partition_by=DedupDecision.item_id, order_by=_NEWEST_FIRST)
             .label("rn"),
         )
+        .where(DedupDecision.is_final.is_(True))
     ).subquery()
     return list(
         db.execute(
@@ -351,19 +472,31 @@ def all_assignments(db: Session) -> list[DedupAssignment]:
     return list(db.execute(select(DedupAssignment)).scalars().all())
 
 
-def reassign(db: Session, item_ids: list[int], to_user_id: str, admin_id: str) -> tuple[list[int], list[int]]:
-    """Move unfinished items to another annotator. Returns (moved, skipped).
+def _slots(db: Session, item_ids: list[int], from_user_id: Optional[str]) -> list[DedupAssignment]:
+    q = select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids))
+    if from_user_id is not None:
+        q = q.where(DedupAssignment.user_id == from_user_id)
+    return list(db.execute(q.with_for_update()).scalars().all())
 
-    Finished items are skipped: their decision belongs to whoever made it. The opened
-    time is reset so time spent is measured for the new annotator.
+
+def reassign(
+    db: Session, item_ids: list[int], to_user_id: str, admin_id: str, from_user_id: Optional[str] = None
+) -> tuple[list[int], list[int]]:
+    """Move unfinished slots to another annotator. Returns (moved, skipped).
+
+    ``from_user_id`` picks whose slot moves; without it every unfinished slot on the
+    items does. Finished slots are skipped: their decision belongs to whoever made it.
+    So is a pair whose other slot the target already holds: nobody answers a pair
+    twice. The opened time is reset so time spent is measured for the new annotator.
     """
-    rows = db.execute(
-        select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids)).with_for_update()
-    ).scalars().all()
+    rows = _slots(db, item_ids, from_user_id)
+    holders = {(a.item_id, a.user_id) for a in db.execute(
+        select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids))
+    ).scalars()}
     now = datetime.utcnow()
     moved, skipped = [], []
     for a in rows:
-        if a.completed_at is not None:
+        if a.completed_at is not None or (a.user_id != to_user_id and (a.item_id, to_user_id) in holders):
             skipped.append(a.item_id)
             continue
         a.user_id = to_user_id
@@ -375,11 +508,9 @@ def reassign(db: Session, item_ids: list[int], to_user_id: str, admin_id: str) -
     return moved, skipped
 
 
-def release(db: Session, item_ids: list[int]) -> tuple[list[int], list[int]]:
-    """Return unfinished items to the pool (anyone's next claim can take them)."""
-    rows = db.execute(
-        select(DedupAssignment).where(DedupAssignment.item_id.in_(item_ids)).with_for_update()
-    ).scalars().all()
+def release(db: Session, item_ids: list[int], from_user_id: Optional[str] = None) -> tuple[list[int], list[int]]:
+    """Return unfinished slots to the pool (anyone's next claim can take them)."""
+    rows = _slots(db, item_ids, from_user_id)
     moved, skipped = [], []
     for a in rows:
         if a.completed_at is not None:
@@ -389,3 +520,108 @@ def release(db: Session, item_ids: list[int]) -> tuple[list[int], list[int]]:
         moved.append(a.item_id)
     skipped += [i for i in item_ids if i not in {a.item_id for a in rows}]
     return moved, skipped
+
+
+# --- adjudication ------------------------------------------------------------------
+
+def open_adjudication(db: Session, item_id: int) -> None:
+    """Queue a disagreeing pair for adjudication (once)."""
+    db.execute(
+        insert(DedupAdjudication)
+        .values(item_id=item_id, created_at=datetime.utcnow())
+        .on_conflict_do_nothing(index_elements=["item_id"])
+    )
+
+
+def get_adjudication(db: Session, item_id: int, *, lock: bool = False) -> Optional[DedupAdjudication]:
+    q = select(DedupAdjudication).where(DedupAdjudication.item_id == item_id)
+    if lock:
+        q = q.with_for_update()
+    return db.execute(q).scalar_one_or_none()
+
+
+def get_adjudications(db: Session, item_ids: Iterable[int]) -> dict[int, DedupAdjudication]:
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    rows = db.execute(select(DedupAdjudication).where(DedupAdjudication.item_id.in_(ids))).scalars().all()
+    return {r.item_id: r for r in rows}
+
+
+def adjudication_queue(db: Session, user_id: str, state: str = "open") -> list[DedupAdjudication]:
+    """Pairs this person may settle, oldest first.
+
+    ``open``: not settled, and free or already taken by them. ``done``: settled by them.
+    Pairs they annotated never appear.
+    """
+    q = select(DedupAdjudication).where(
+        ~select(DedupAssignment.id)
+        .where(DedupAssignment.item_id == DedupAdjudication.item_id, DedupAssignment.user_id == user_id)
+        .exists()
+    )
+    open_q = DedupAdjudication.completed_at.is_(None) & (
+        DedupAdjudication.user_id.is_(None) | (DedupAdjudication.user_id == user_id)
+    )
+    done_q = DedupAdjudication.completed_at.is_not(None) & (DedupAdjudication.user_id == user_id)
+    if state == "open":
+        q = q.where(open_q)
+    elif state == "done":
+        q = q.where(done_q)
+    else:
+        q = q.where(open_q | done_q)
+    return list(db.execute(q.order_by(DedupAdjudication.created_at, DedupAdjudication.item_id)).scalars().all())
+
+
+def all_adjudications(db: Session) -> list[DedupAdjudication]:
+    return list(db.execute(select(DedupAdjudication).order_by(DedupAdjudication.created_at)).scalars().all())
+
+
+def latest_adjudicator_decisions(db: Session, item_ids: Iterable[int]) -> dict[int, DedupDecision]:
+    """``{item_id: decision}``: the current adjudicator answer per item."""
+    ids = list(item_ids)
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(DedupDecision)
+        .where(DedupDecision.item_id.in_(ids), DedupDecision.role == ROLE_ADJUDICATOR)
+        .order_by(DedupDecision.item_id, *_NEWEST_FIRST)
+    ).scalars().all()
+    out: dict[int, DedupDecision] = {}
+    for d in rows:
+        out.setdefault(d.item_id, d)
+    return out
+
+
+def double_review_counts(db: Session) -> dict[str, int]:
+    """Double-review pairs by stage."""
+    one_slot = (
+        select(DedupAssignment.item_id)
+        .join(DedupItem, DedupItem.item_id == DedupAssignment.item_id)
+        .where(DedupItem.review_mode == MODE_DOUBLE)
+        .group_by(DedupAssignment.item_id)
+        .having(func.count() == 1)
+    ).subquery()
+    answered = (
+        select(DedupDecision.item_id)
+        .join(DedupItem, DedupItem.item_id == DedupDecision.item_id)
+        .where(DedupItem.review_mode == MODE_DOUBLE, DedupDecision.role == ROLE_ANNOTATOR)
+        .group_by(DedupDecision.item_id)
+        .having(func.count(func.distinct(DedupDecision.user_id)) == 2)
+    ).subquery()
+    adj = db.execute(
+        select(
+            func.count().filter(DedupAdjudication.completed_at.is_(None) & DedupAdjudication.user_id.is_(None)),
+            func.count().filter(DedupAdjudication.completed_at.is_(None) & DedupAdjudication.user_id.is_not(None)),
+            func.count().filter(DedupAdjudication.completed_at.is_not(None)),
+            func.count(),
+        )
+    ).one()
+    both = db.execute(select(func.count()).select_from(answered)).scalar_one()
+    return {
+        "awaiting_second": db.execute(select(func.count()).select_from(one_slot)).scalar_one(),
+        "both_answered": both,
+        "agreed": both - adj[3],
+        "adjudication_waiting": adj[0],
+        "adjudication_in_progress": adj[1],
+        "adjudicated": adj[2],
+    }

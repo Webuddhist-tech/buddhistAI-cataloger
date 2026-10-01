@@ -68,7 +68,15 @@ class DecisionIn(BaseModel):
         return self
 
 
+class AdjudicationIn(DecisionIn):
+    """An adjudicator's answer: a decision, plus an optional note on why. Leave
+    ``note`` out to keep the one already saved."""
+
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
 class AssignmentOut(BaseModel):
+    slot: int = 1
     assigned_at: datetime
     first_opened_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -101,6 +109,57 @@ class ItemOut(BaseModel):
     decided_at: Optional[datetime] = None
     sync_state: Optional[str] = None
     assignment: Optional[AssignmentOut] = None
+    # "single" (answer is final) or "double" (two annotators, then an adjudicator if
+    # they disagree).
+    review_mode: str = "single"
+    # Both annotators have answered, so this answer can no longer change.
+    locked: bool = False
+
+
+class AnnotatorAnswerOut(BaseModel):
+    """One annotator's answer, as the adjudicator sees it. ``label`` is "Annotator 1"
+    or "Annotator 2" in an order shuffled per adjudicator; who answered is only shown
+    to admins."""
+
+    label: str
+    verdict: Optional[str] = None
+    abstention_reason: Optional[str] = None
+    confidence: Optional[int] = None
+    issues: Optional[list[dict[str, Any]]] = None
+    partner_payload: Optional[dict[str, Any]] = None
+    decided_at: Optional[datetime] = None
+    slot: Optional[int] = None
+    annotator_id: Optional[str] = None
+
+
+class AdjudicationOut(BaseModel):
+    created_at: datetime
+    adjudicator_id: Optional[str] = None
+    reserved_at: Optional[datetime] = None
+    first_opened_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    resolution: Optional[str] = None
+    active_seconds: int = 0
+
+
+class AdjudicationItemOut(ItemOut):
+    """A disputed pair: the evidence, both annotators' answers, and this adjudicator's
+    own answer in the usual ``verdict``/``confidence``/... fields."""
+
+    note: Optional[str] = None
+    annotations: list[AnnotatorAnswerOut] = Field(default_factory=list)
+    adjudication: AdjudicationOut
+
+
+class PairOut(BaseModel):
+    """A pair as anyone may see it from a shared link: the evidence only, never an
+    answer (in double review, one annotator must not see the other's)."""
+
+    item_id: int
+    batch_id: str
+    kind: str
+    subject: dict[str, Any]
+    evidence: dict[str, Any]
 
 
 class BatchOut(BaseModel):
@@ -146,6 +205,18 @@ class AdminBatchOut(BaseModel):
     assigned_done: int = 0
 
 
+class DoubleReviewCounts(BaseModel):
+    """Double-review pairs by stage."""
+
+    awaiting_second: int = 0
+    both_answered: int = 0
+    agreed: int = 0
+    adjudication_waiting: int = 0
+    adjudication_in_progress: int = 0
+    adjudicated: int = 0
+    # How adjudicated pairs were settled: sided_with_1 | sided_with_2 | new_label | unresolved.
+    resolutions: dict[str, int] = Field(default_factory=dict)
+
 class AdminOverviewOut(BaseModel):
     totals: WorkCounts
     batches: list[AdminBatchOut]
@@ -154,6 +225,8 @@ class AdminOverviewOut(BaseModel):
     abstention_reasons: dict[str, int]
     issues: dict[str, int]
     sync: SyncHealthOut
+    double_review: DoubleReviewCounts
+
 
 
 class AnnotatorOut(WorkCounts):
@@ -161,17 +234,47 @@ class AnnotatorOut(WorkCounts):
     name: Optional[str] = None
     email: Optional[str] = None
     picture: Optional[str] = None
+    # admin | reviewer (shown as "Adjudicator") | annotator
+    role: Optional[str] = None
     has_access: bool = True
     # Active time on screen: in total, and on average per answered pair.
     total_active_seconds: int = 0
     avg_active_seconds: Optional[float] = None
     last_active: Optional[datetime] = None
+    # Double-review pairs where both annotators answered, and how many of those agreed.
+    paired: int = 0
+    agreed: int = 0
+    # Pairs this person settled as adjudicator.
+    adjudicated: int = 0
 
 
 class ReassignIn(BaseModel):
     item_ids: list[int] = Field(min_length=1, max_length=500)
     # Another annotator's id, or null to release the items back to the pool.
     to_user_id: Optional[str] = None
+    # Whose slot moves (a pair has two). Without it, every unfinished slot on the items.
+    from_user_id: Optional[str] = None
+
+
+class AdjudicationReassignIn(BaseModel):
+    item_ids: list[int] = Field(min_length=1, max_length=500)
+    # An adjudicator's id, or null to put the pairs back in the queue for anyone.
+    to_user_id: Optional[str] = None
+
+
+class AdminAdjudicationOut(BaseModel):
+    item_id: int
+    batch_id: str
+    title_a: Optional[str] = None
+    title_b: Optional[str] = None
+    created_at: datetime
+    adjudicator_id: Optional[str] = None
+    adjudicator_name: Optional[str] = None
+    reserved_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    resolution: Optional[str] = None
+    verdict: Optional[str] = None
+    annotations: list[AnnotatorAnswerOut] = Field(default_factory=list)
 
 
 class ReassignOut(BaseModel):

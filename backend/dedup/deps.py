@@ -56,6 +56,13 @@ def has_dedup_access(user: User) -> bool:
     return role in _ALLOWED_ROLES and DEDUP_PERMISSION in _parse_permissions(user.permissions)
 
 
+def require_logged_in(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> User:
+    """Any Cataloger account: for read-only pair pages shared as links."""
+    return _user_from_token(creds)
+
+
 def require_dedup_access(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
@@ -80,3 +87,18 @@ def require_dedup_admin(
 
 def is_admin(user: User) -> bool:
     return (user.role or "").strip().lower() == "admin"
+
+
+def _role(user: User) -> str:
+    return (user.role or "user").strip().lower()
+
+
+def can_annotate(user: User) -> bool:
+    """Annotators and admins take annotator slots; reviewers only adjudicate."""
+    return has_dedup_access(user) and _role(user) in ("annotator", "admin")
+
+
+def can_adjudicate(user: User) -> bool:
+    """Reviewers (shown as "Adjudicator") and admins settle disagreements, as in the
+    Outliner; never on a pair they annotated (checked per item)."""
+    return has_dedup_access(user) and _role(user) in ("reviewer", "admin")

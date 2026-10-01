@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users } from 'lucide-react';
+import { Gavel, LayoutDashboard, Users } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 
 const LINKS = [
   { to: '/dedup-admin/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dedup-admin/annotators', label: 'Annotators', icon: Users },
+  { to: '/dedup-admin/adjudications', label: 'Adjudications', icon: Gavel },
 ];
 
 export default function DedupAdminLayout({ children }: Readonly<{ children: ReactNode }>) {

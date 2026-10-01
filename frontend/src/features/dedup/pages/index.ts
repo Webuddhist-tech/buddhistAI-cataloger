@@ -1,3 +1,5 @@
 export { default as Dashboard } from './Dashboard'
 export { default as Queue } from './Queue'
 export { default as Review } from './Review'
+export { default as AdjudicationQueue } from './AdjudicationQueue'
+export { default as PairView } from './PairView'

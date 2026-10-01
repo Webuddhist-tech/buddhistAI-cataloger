@@ -66,6 +66,20 @@ export const ABSTENTION_LABEL: Record<string, string> = {
   out_of_scope: 'Outside this review',
 };
 
+// How an adjudicator settled a disputed pair.
+export const RESOLUTION_LABEL: Record<string, string> = {
+  sided_with_1: 'Agreed with annotator 1',
+  sided_with_2: 'Agreed with annotator 2',
+  new_label: 'Chose a different answer',
+  unresolved: 'Unresolved (also could not answer)',
+};
+
+/** An answer as a short label: "Can't answer" for not_sure. */
+export function answerLabel(verdict: string | null | undefined): string {
+  if (!verdict) return '—';
+  return verdict === 'not_sure' ? "Can't answer" : verdictLabel(verdict);
+}
+
 export const ISSUE_LABEL: Record<string, string> = {
   author_conflict: 'Authors conflict',
   wrong_author: 'Author is wrong',

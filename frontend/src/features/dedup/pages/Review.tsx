@@ -1,32 +1,53 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Columns2, Flag, GitCompareArrows } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Flag, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import type { DecisionInput } from '../api/review';
+import { Textarea } from '@/components/ui/textarea';
+import type { AdjudicationItem, DecisionInput, ReviewItem } from '../api/review';
+import AnnotatorAnswers from '../components/AnnotatorAnswers';
 import CantAnswerDialog, { type CantAnswerStart } from '../components/CantAnswerDialog';
 import FullTextDialog, { type FullTextView } from '../components/FullTextDialog';
 import PreferredCopyDialog, { type PreferredChoice } from '../components/PreferredCopyDialog';
-import WitnessPanel from '../components/WitnessPanel';
+import CopyPairLink from '../components/CopyPairLink';
+import PairEvidence from '../components/PairEvidence';
 import { useActiveTimer } from '../hooks/useActiveTimer';
-import { useBatchName, useItem, useMyItems, useSaveDecision } from '../hooks/useReview';
-import { ISSUE_LABEL, hasIssue, isDecided, overlapNote, pct, verdictLabel } from '../utils';
+import {
+  useAdjudicationItem,
+  useAdjudicationQueue,
+  useBatchName,
+  useItem,
+  useMyItems,
+  useSaveAdjudication,
+  useSaveDecision,
+} from '../hooks/useReview';
+import { ISSUE_LABEL, hasIssue, isDecided, verdictLabel } from '../utils';
 
 const CONFIDENCE = [1, 2, 3, 4, 5];
 // The shared Button has no pointer cursor; added here to leave other features untouched.
 const PTR = 'cursor-pointer';
 const CHOSEN_NEUTRAL = 'border-gray-800 bg-gray-800 text-white hover:bg-gray-900 hover:text-white';
 
+export type ReviewMode = 'annotate' | 'adjudicate';
+
 // Keys (plan §11): J same, F different, C contains / part-of, Space can't answer,
 // X report a data problem on the saved answer, 1-5 confidence, arrows move.
-export default function Review() {
+//
+// `adjudicate`: the same screen for a disputed pair, with both annotators' answers above
+// the texts and an optional note. The adjudicator's answer is final.
+export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMode }>) {
+  const adjudicate = mode === 'adjudicate';
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
   const navigate = useNavigate();
   const batchName = useBatchName();
 
-  const itemQuery = useItem(itemId);
-  const list = useMyItems('all');
+  const annotatorItem = useItem(adjudicate ? undefined : itemId);
+  const adjudicationItem = useAdjudicationItem(adjudicate ? itemId : undefined);
+  const itemQuery = adjudicate ? adjudicationItem : annotatorItem;
+  const myList = useMyItems('all', undefined, !adjudicate);
+  const adjudicationList = useAdjudicationQueue('all', adjudicate);
+  const list: { data?: ReviewItem[] } = adjudicate ? adjudicationList : myList;
   const loaded = useMemo(() => list.data ?? [], [list.data]);
   const total = loaded.length;
   const index = loaded.findIndex((i) => i.item_id === itemId);
@@ -35,19 +56,28 @@ export default function Review() {
   const nextId = index >= 0 && index < loaded.length - 1 ? loaded[index + 1].item_id : null;
   const goTo = useCallback(
     (id: number | null) => {
-      if (id != null) navigate(`/dedup/item/${id}`);
+      if (id != null) navigate(adjudicate ? `/dedup/adjudicate/${id}` : `/dedup/item/${id}`);
     },
-    [navigate],
+    [navigate, adjudicate],
   );
 
-  const item = itemQuery.data;
-  const save = useSaveDecision();
-  // Only for the pair's own annotator (an admin viewing it is not doing the work).
+  const item = itemQuery.data as ReviewItem | AdjudicationItem | undefined;
+  const adjItem = adjudicate ? (item as AdjudicationItem | undefined) : undefined;
+  const saveAnswer = useSaveDecision();
+  const saveAdjudication = useSaveAdjudication();
+  const save = adjudicate ? saveAdjudication : saveAnswer;
+  // Both annotators have answered: the answer is shown but can no longer change.
+  const locked = Boolean(!adjudicate && item?.locked);
+  // Only for the person doing the work on the pair (an admin viewing it is not).
   const { commit: commitActiveTime } = useActiveTimer(
     item?.item_id,
     Boolean(item && loaded.some((i) => i.item_id === item.item_id)),
     Boolean(item && isDecided(item)),
   );
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    setNote(adjItem?.note ?? '');
+  }, [adjItem?.item_id, adjItem?.note]);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [dialog, setDialog] = useState<CantAnswerStart | null>(null);
   const [fullText, setFullText] = useState<FullTextView | null>(null);
@@ -84,7 +114,8 @@ export default function Review() {
       };
       commitActiveTime();
       try {
-        await save.mutateAsync({ itemId: item.item_id, fields: body });
+        if (adjudicate) await saveAdjudication.mutateAsync({ itemId: item.item_id, fields: { ...body, note: note.trim() || null } });
+        else await saveAnswer.mutateAsync({ itemId: item.item_id, fields: body });
         // Reporting a problem on an answered pair stays here; answering moves on.
         if (fields.verdict) advanceTimer.current = window.setTimeout(() => goTo(nextId), 250);
       } catch (e) {
@@ -92,8 +123,25 @@ export default function Review() {
         throw e;
       }
     },
-    [item, confidence, save, goTo, nextId, commitActiveTime],
+    [item, confidence, adjudicate, note, saveAdjudication, saveAnswer, goTo, nextId, commitActiveTime],
   );
+
+  // A note on an answer already saved goes with that same answer.
+  const saveNote = useCallback(() => {
+    if (!item?.verdict) return;
+    saveAdjudication
+      .mutateAsync({
+        itemId: item.item_id,
+        fields: {
+          verdict: item.verdict,
+          abstention_reason: item.abstention_reason,
+          confidence: item.confidence,
+          note: note.trim() || null,
+        },
+      })
+      .then(() => toast.success('Note saved'))
+      .catch((e: Error) => toast.error(`Could not save: ${e.message}`));
+  }, [item, note, saveAdjudication]);
 
   const decide = useCallback(
     (verdict: 'same' | 'different') => {
@@ -114,9 +162,10 @@ export default function Review() {
   // A data problem is reported alongside an answer (plan §5), so the pair needs one first.
   const answered = Boolean(item && isDecided(item));
   const reportProblem = useCallback(() => {
-    if (answered) setDialog('issue');
+    if (locked) toast.info('Both annotators have answered, so this pair is locked.');
+    else if (answered) setDialog('issue');
     else toast.info('Answer the pair first. Contains and Can’t answer can include a data problem directly.');
-  }, [answered]);
+  }, [answered, locked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -124,7 +173,10 @@ export default function Review() {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const k = e.key.toLowerCase();
-      if (k === 'j') decide('same');
+      if (k === 'arrowleft') goTo(prevId);
+      else if (k === 'arrowright') goTo(nextId);
+      else if (locked) return;
+      else if (k === 'j') decide('same');
       else if (k === 'f') decide('different');
       else if (k === 'c') setDialog('contains');
       else if (k === 'x') reportProblem();
@@ -132,12 +184,10 @@ export default function Review() {
         e.preventDefault();
         setDialog('default');
       } else if (k >= '1' && k <= '5') setConfidence(Number(k));
-      else if (k === 'arrowleft') goTo(prevId);
-      else if (k === 'arrowright') goTo(nextId);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, fullText, askPreferred, decide, reportProblem, goTo, prevId, nextId]);
+  }, [dialog, fullText, askPreferred, decide, reportProblem, goTo, prevId, nextId, locked]);
 
   if (itemQuery.isLoading) {
     return <div className="py-24 text-center text-gray-500">Loading item…</div>;
@@ -153,14 +203,10 @@ export default function Review() {
   }
 
   const ev = item.evidence;
-  const m = ev.metrics ?? {};
   const cardA = ev.a ?? { mw_id: item.subject.a_mw ?? '' };
   const cardB = ev.b ?? { mw_id: item.subject.b_mw ?? '' };
   const isChosen = (...v: string[]) => item.verdict != null && v.includes(item.verdict);
   const tick = (...v: string[]) => (isChosen(...v) ? <Check className="h-4 w-4" /> : null);
-  // Same title, clearly different author: the author data cannot settle it.
-  const authorConflict =
-    m.title_lev != null && m.title_lev >= 0.95 && m.author_lev != null && m.author_lev < 0.5;
   // The saved "which copy" answer: undefined = never asked, null = no preference.
   const preferred = item.partner_payload?.preferred_mw_id as PreferredChoice | undefined;
   let preferredNote = '';
@@ -174,11 +220,15 @@ export default function Review() {
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6" style={{ paddingBottom: barHeight + 24 }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/dedup" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" /> My items
+        <Link
+          to={adjudicate ? '/dedup/adjudicate' : '/dedup'}
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft className="h-4 w-4" /> {adjudicate ? 'To adjudicate' : 'My items'}
           <span className="ml-1 text-xs text-gray-400" title={item.batch_id}>· {batchName(item.batch_id)}</span>
         </Link>
         <div className="flex items-center gap-2">
+          <CopyPairLink itemId={item.item_id} />
           {index >= 0 && (
             <span className="mr-1 text-xs tabular-nums text-gray-500">
               Item {index + 1} of {total}
@@ -193,80 +243,39 @@ export default function Review() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        {m.jaccard != null ? (
-          <div className="inline-flex min-w-0 items-center gap-3 rounded-md border border-gray-200 border-l-4 border-l-gray-800 bg-white px-4 py-2 shadow-sm">
-            <span className="text-2xl font-semibold tabular-nums text-gray-900">{pct(m.jaccard)}</span>
-            <span className="leading-tight">
-              <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                shared wording
-              </span>
-              <span className="block text-sm text-gray-800">{overlapNote(m.jaccard)}</span>
-            </span>
-          </div>
-        ) : (
-          <span />
-        )}
-          <div className="flex w-full overflow-hidden rounded-md border border-violet-200 bg-violet-50 shadow-sm sm:inline-flex sm:w-auto">
-          <button
-            onClick={() => setFullText('side')}
-            className={`${PTR} inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-3.5 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-100 sm:flex-none`}
-          >
-            <Columns2 className="h-4 w-4 shrink-0" /> <span className="sm:hidden">Full texts</span>
-            <span className="hidden sm:inline">Compare full texts</span>
-          </button>
-          <span className="w-px bg-violet-200" />
-          <button
-            onClick={() => setFullText('diff')}
-            className={`${PTR} inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-3.5 py-2 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-100 sm:flex-none`}
-          >
-            <GitCompareArrows className="h-4 w-4 shrink-0" /> <span className="sm:hidden">Differences</span>
-            <span className="hidden sm:inline">Show differences</span>
-          </button>
-        </div>
-      </div>
+      <PairEvidence evidence={ev} cardA={cardA} cardB={cardB} onFullText={setFullText}>
+        {adjItem && <AnnotatorAnswers answers={adjItem.annotations} a={cardA} b={cardB} />}
+      </PairEvidence>
 
-      {authorConflict && (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-          <strong>These two share a title but list different authors.</strong> The author data cannot
-          settle this: judge by the texts, then use &ldquo;Report a data problem&rdquo; to report
-          &ldquo;Authors conflict&rdquo;.
-        </div>
-      )}
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <WitnessPanel tag="A" card={cardA} />
-        <WitnessPanel tag="B" card={cardB} />
-      </div>
-
-      {/* Collapsed by default: the scores anchor reviewers toward agreeing with the machine. */}
-      <details className="mt-4 rounded-lg border border-gray-200 bg-white">
-        <summary className="cursor-pointer select-none px-4 py-3 text-sm text-gray-600 hover:text-gray-900">
-          Show similarity details
-        </summary>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-200 px-4 py-4 sm:grid-cols-3 sm:gap-x-6 lg:grid-cols-5">
-          <Metric k="Shared wording" v={pct(m.jaccard)} note="Jaccard" />
-          <Metric k="Containment" v={pct(m.containment)} note="how much of the shorter is in the longer" />
-          <Metric k="Opening similarity" v={pct(m.head_sim)} />
-          <Metric k="Ending similarity" v={pct(m.tail_sim)} />
-          <Metric k="Title match" v={pct(m.title_lev)} />
-          <Metric k="Author match" v={pct(m.author_lev)} note={m.author_lev == null ? 'no author data' : undefined} />
-          <Metric k="Length ratio" v={m.len_ratio != null ? m.len_ratio.toFixed(2) : '—'} note="1.00 = same length" />
-          <Metric k="Same scan" v={m.same_rep == null ? '—' : m.same_rep ? 'yes' : 'no'} note="both from one reproduction" />
-          {ev.why && (
-            <div className="col-span-full break-all border-t border-gray-100 pt-3 font-mono text-xs text-gray-400">
-              {ev.why}
+      {adjudicate && (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
+          <label htmlFor="adjudication-note" className="text-sm font-medium text-gray-700">
+            Note <span className="font-normal text-gray-400">(optional)</span>
+          </label>
+          <Textarea
+            id="adjudication-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Why you decided this way, e.g. what the annotators missed"
+            maxLength={2000}
+            className="mt-1.5 min-h-[64px] text-sm"
+          />
+          {answered && note.trim() !== (adjItem?.note ?? '') && (
+            <div className="mt-2 flex justify-end">
+              <Button size="sm" variant="outline" className={PTR} onClick={saveNote} disabled={save.isPending}>
+                Save note
+              </Button>
             </div>
           )}
         </div>
-      </details>
+      )}
 
       <div
         ref={barRef}
         className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur"
       >
         {/* Status strip: what is saved for this pair, and its data problems. Shown once there is something to say. */}
-        {(answered || problems.length > 0 || save.isPending) && (
+        {(answered || problems.length > 0 || save.isPending || locked) && (
           <div className="border-b border-gray-100 bg-gray-50/80">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-xs sm:px-6 lg:px-8">
               {save.isPending ? (
@@ -275,7 +284,7 @@ export default function Review() {
                 recorded && (
                   <span className="inline-flex items-center gap-1.5 text-gray-600">
                     <Check className="h-3.5 w-3.5 text-green-600" />
-                    Saved <span className="font-medium text-gray-900">{recorded}</span>
+                    {adjudicate ? 'Final answer' : 'Saved'} <span className="font-medium text-gray-900">{recorded}</span>
                   </span>
                 )
               )}
@@ -289,7 +298,12 @@ export default function Review() {
                 </span>
               ))}
               {!answered && problems.length > 0 && <span className="text-amber-800">Needs an answer</span>}
-              {answered && (
+              {locked && (
+                <span className="inline-flex items-center gap-1.5 text-gray-600">
+                  <Lock className="h-3.5 w-3.5" /> Both annotators have answered, so this answer is locked
+                </span>
+              )}
+              {answered && !locked && (
                 <button
                   type="button"
                   onClick={reportProblem}
@@ -316,7 +330,7 @@ export default function Review() {
                   : 'border-green-300 text-green-700 hover:bg-green-50'
               }`}
               onClick={() => decide('same')}
-              disabled={save.isPending}
+              disabled={save.isPending || locked}
               aria-pressed={isChosen('same')}
             >
               {tick('same')} Same work <Kbd>J</Kbd>
@@ -329,7 +343,7 @@ export default function Review() {
                   : 'border-red-300 text-red-700 hover:bg-red-50'
               }`}
               onClick={() => decide('different')}
-              disabled={save.isPending}
+              disabled={save.isPending || locked}
               aria-pressed={isChosen('different')}
             >
               {tick('different')} Different <Kbd>F</Kbd>
@@ -338,7 +352,7 @@ export default function Review() {
               variant="outline"
               className={`${PTR} ${isChosen('contains', 'part_of') ? CHOSEN_NEUTRAL : ''}`}
               onClick={() => setDialog('contains')}
-              disabled={save.isPending}
+              disabled={save.isPending || locked}
               aria-pressed={isChosen('contains', 'part_of')}
             >
               {tick('contains', 'part_of')} Contains / part-of <Kbd>C</Kbd>
@@ -347,7 +361,7 @@ export default function Review() {
               variant="outline"
               className={`${PTR} ${isChosen('not_sure') ? CHOSEN_NEUTRAL : ''}`}
               onClick={() => setDialog('default')}
-              disabled={save.isPending}
+              disabled={save.isPending || locked}
               aria-pressed={isChosen('not_sure')}
             >
               {tick('not_sure')} Can&rsquo;t answer <Kbd>Space</Kbd>
@@ -360,6 +374,7 @@ export default function Review() {
               <button
                 key={n}
                 onClick={() => setConfidence(confidence === n ? null : n)}
+                disabled={locked}
                 className={`h-9 w-9 cursor-pointer rounded-md border text-sm tabular-nums ${
                   confidence === n
                     ? 'border-gray-900 bg-gray-900 text-white'
@@ -395,18 +410,6 @@ export default function Review() {
         start={dialog ?? 'default'}
         onSubmit={submit}
       />
-    </div>
-  );
-}
-
-function Metric({ k, v, note }: { k: string; v: string; note?: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-gray-400">{k}</div>
-      <div className={`text-sm tabular-nums ${v === '—' || v === 'not scored' ? 'text-gray-400' : 'text-gray-900'}`}>
-        {v}
-      </div>
-      {note && <div className="text-[11px] text-gray-400">{note}</div>}
     </div>
   );
 }
