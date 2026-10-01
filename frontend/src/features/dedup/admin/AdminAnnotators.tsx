@@ -44,6 +44,8 @@ export default function AdminAnnotators() {
                 <span>{a.not_started} not opened</span>
                 <span>{formatDuration(a.total_active_seconds)} in total</span>
                 <span>~{formatDuration(a.avg_active_seconds)} per pair</span>
+                <span>Agreed {agreement(a)}</span>
+                {a.adjudicated > 0 && <span>{a.adjudicated} adjudicated</span>}
                 <span>Active {formatDateTime(a.last_active)}</span>
               </div>
             </button>
@@ -79,6 +81,17 @@ export default function AdminAnnotators() {
                     <InfoTip text="Average working time per answered pair, including any return visits." />
                   </span>
                 </th>
+                <th className="px-3 py-3 text-right font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    Agreement
+                    <InfoTip text="Of the pairs this person and their partner both answered, how many they answered the same. Low agreement can mean the person needs help, or that the pairs were hard." />
+                  </span>
+                </th>
+                <th className="px-3 py-3 text-right font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    Adjudicated <InfoTip text="Disputed pairs this person settled as adjudicator." />
+                  </span>
+                </th>
                 <th className="px-3 py-3 font-medium">Last active</th>
                 <th className="rounded-tr-lg px-4 py-3" />
               </tr>
@@ -98,6 +111,8 @@ export default function AdminAnnotators() {
                     {formatDuration(a.total_active_seconds || null)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatDuration(a.avg_active_seconds)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{agreement(a)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.adjudicated || '—'}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">{formatDateTime(a.last_active)}</td>
                   <td className="px-4 py-3 text-right">
                     <span className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-blue-700">
@@ -114,6 +129,12 @@ export default function AdminAnnotators() {
   );
 }
 
+/** "8 of 10 (80%)", or "—" before any pair has both answers. */
+function agreement(a: Annotator): string {
+  if (!a.paired) return '—';
+  return `${a.agreed} of ${a.paired} (${Math.round((a.agreed / a.paired) * 100)}%)`;
+}
+
 function Progress({ a }: Readonly<{ a: Annotator }>) {
   const pct = a.assigned ? (a.done / a.assigned) * 100 : 0;
   return (
@@ -128,7 +149,7 @@ function Progress({ a }: Readonly<{ a: Annotator }>) {
   );
 }
 
-export function Person({ a }: Readonly<{ a: Pick<Annotator, 'name' | 'email' | 'picture' | 'has_access'> }>) {
+export function Person({ a }: Readonly<{ a: Pick<Annotator, 'name' | 'email' | 'picture' | 'has_access'> & { role?: string | null } }>) {
   const initial = (a.name || a.email || '?').charAt(0).toUpperCase();
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -143,6 +164,9 @@ export function Person({ a }: Readonly<{ a: Pick<Annotator, 'name' | 'email' | '
         <div className="truncate font-medium text-gray-900">{a.name || a.email}</div>
         <div className="flex items-center gap-2 truncate text-xs text-gray-500">
           {a.name && <span className="truncate">{a.email}</span>}
+          {a.role === 'reviewer' && (
+            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">Adjudicator</span>
+          )}
           {!a.has_access && (
             <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700">access removed</span>
           )}

@@ -2,6 +2,9 @@ import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   claimItems,
+  fetchAdjudicationItem,
+  fetchAdjudicationQueue,
+  fetchAdminAdjudications,
   fetchAdminOverview,
   fetchAnnotatorItems,
   fetchAnnotators,
@@ -10,8 +13,13 @@ import {
   fetchText,
   fetchItem,
   fetchMyItems,
+  fetchPair,
+  reassignAdjudications,
   reassignItems,
+  saveAdjudication,
   saveDecision,
+  type AdjudicationInput,
+  type AdjudicationItem,
   type DecisionInput,
   type DiffGranularity,
   type MyItemsState,
@@ -28,6 +36,10 @@ const keys = {
   myItems: (state: MyItemsState, batchId?: string) =>
     [...reviewQueryKeyRoot, 'my-items', state, batchId ?? 'all-batches'] as const,
   item: (itemId: number) => [...reviewQueryKeyRoot, 'item', itemId] as const,
+  pair: (itemId: number) => [...reviewQueryKeyRoot, 'pair', itemId] as const,
+  adjudicationRoot: [...reviewQueryKeyRoot, 'adjudication'] as const,
+  adjudicationQueue: (state: MyItemsState) => [...reviewQueryKeyRoot, 'adjudication', 'queue', state] as const,
+  adjudicationItem: (itemId: number) => [...reviewQueryKeyRoot, 'adjudication', 'item', itemId] as const,
   text: (mwId: string) => [...reviewQueryKeyRoot, 'text', mwId] as const,
   diff: (a: string, b: string, g: DiffGranularity) => [...reviewQueryKeyRoot, 'diff', a, b, g] as const,
   adminRoot: [...reviewQueryKeyRoot, 'admin'] as const,
@@ -35,6 +47,7 @@ const keys = {
   annotators: [...reviewQueryKeyRoot, 'admin', 'annotators'] as const,
   annotatorItems: (userId: string, state: MyItemsState) =>
     [...reviewQueryKeyRoot, 'admin', 'items', userId, state] as const,
+  adminAdjudications: (state: MyItemsState) => [...reviewQueryKeyRoot, 'admin', 'adjudications', state] as const,
 };
 
 export function useBatches() {
@@ -59,10 +72,11 @@ export function useBatchName() {
 }
 
 /** This user's items, oldest first; all batches unless one is given. */
-export function useMyItems(state: MyItemsState = 'all', batchId?: string) {
+export function useMyItems(state: MyItemsState = 'all', batchId?: string, enabled = true) {
   return useQuery({
     queryKey: keys.myItems(state, batchId),
     queryFn: ({ signal }) => fetchMyItems(state, batchId, { signal }),
+    enabled,
     // An admin may move items at any time: reload on every visit and tab focus.
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -135,6 +149,65 @@ export function useSaveDecision() {
   });
 }
 
+/** The read-only shared page of a pair. */
+export function usePair(itemId: number | undefined) {
+  const valid = itemId != null && !Number.isNaN(itemId);
+  return useQuery({
+    queryKey: keys.pair(itemId ?? 0),
+    queryFn: ({ signal }) => fetchPair(itemId!, { signal }),
+    enabled: valid,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+// Adjudication
+
+/** Disputed pairs this person may settle (`open`), has settled (`done`), or both. */
+export function useAdjudicationQueue(state: MyItemsState = 'open', enabled = true) {
+  return useQuery({
+    queryKey: keys.adjudicationQueue(state),
+    queryFn: ({ signal }) => fetchAdjudicationQueue(state, { signal }),
+    enabled,
+    // Pairs arrive whenever two annotators disagree: reload on every visit and tab focus.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Opening a pair takes it for this adjudicator, so it is always fetched; the queue's
+ * copy is shown meanwhile. */
+export function useAdjudicationItem(itemId: number | undefined) {
+  const queryClient = useQueryClient();
+  const valid = itemId != null && !Number.isNaN(itemId);
+  const fromList = valid
+    ? queryClient
+        .getQueriesData<AdjudicationItem[]>({ queryKey: keys.adjudicationRoot })
+        .flatMap(([, data]) => (Array.isArray(data) ? data : []))
+        .find((it) => it.item_id === itemId)
+    : undefined;
+  return useQuery({
+    queryKey: keys.adjudicationItem(itemId ?? 0),
+    queryFn: ({ signal }) => fetchAdjudicationItem(itemId!, { signal }),
+    enabled: valid,
+    placeholderData: fromList,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useSaveAdjudication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, fields }: { itemId: number; fields: AdjudicationInput }) =>
+      saveAdjudication(itemId, fields),
+    onSuccess: (updated: AdjudicationItem) => {
+      queryClient.setQueryData(keys.adjudicationItem(updated.item_id), updated);
+      queryClient.invalidateQueries({ queryKey: keys.adjudicationRoot, exact: false, refetchType: 'active' });
+    },
+  });
+}
+
 /** Only fetched when `enabled`. */
 export function useFullText(mwId: string | undefined, enabled = true) {
   return useQuery({
@@ -185,11 +258,31 @@ export function useAnnotatorItems(userId: string | undefined, state: MyItemsStat
 export function useReassign() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ itemIds, toUserId }: { itemIds: number[]; toUserId: string | null }) =>
-      reassignItems(itemIds, toUserId),
+    mutationFn: ({ itemIds, toUserId, fromUserId }: { itemIds: number[]; toUserId: string | null; fromUserId?: string }) =>
+      reassignItems(itemIds, toUserId, fromUserId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.adminRoot });
       queryClient.invalidateQueries({ queryKey: keys.myItemsRoot });
+    },
+  });
+}
+
+export function useAdminAdjudications(state: MyItemsState) {
+  return useQuery({
+    queryKey: keys.adminAdjudications(state),
+    queryFn: ({ signal }) => fetchAdminAdjudications(state, { signal }),
+    staleTime: 0,
+  });
+}
+
+export function useReassignAdjudications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemIds, toUserId }: { itemIds: number[]; toUserId: string | null }) =>
+      reassignAdjudications(itemIds, toUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.adminRoot });
+      queryClient.invalidateQueries({ queryKey: keys.adjudicationRoot });
     },
   });
 }

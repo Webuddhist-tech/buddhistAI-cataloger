@@ -44,7 +44,7 @@ def _process_available() -> int:
                 return processed
             processed += 1
             try:
-                client.put_item(decision.item_id, bdrc_payload(decision))
+                client.put_item(decision.item_id, bdrc_payload(db, decision))
                 repo.mark_synced(db, decision.id)
                 logger.info(
                     "dedup sync ok decision=%s item=%s attempts=%s",

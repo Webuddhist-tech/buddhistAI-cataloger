@@ -1,11 +1,15 @@
 """ORM models for the dedup review tool.
 
-* ``dedup_items``        a copy of each BDRC review item an annotator has claimed
-* ``dedup_assignments``  which annotator an item belongs to (one per item)
-* ``dedup_decisions``    every decision, append-only, each with its own sync state
+* ``dedup_items``          a copy of each BDRC review item an annotator has claimed
+* ``dedup_assignments``    which annotators an item belongs to (two slots per item)
+* ``dedup_decisions``      every decision, append-only, each with its own sync state
+* ``dedup_adjudications``  pairs whose two answers disagree, and who settles them
 
-A decision is saved here first and pushed to BDRC by ``dedup.sync_worker``, which
-retries while BDRC is unreachable.
+Double review: two annotators answer each pair without seeing each other's answer. If
+their verdicts match, that verdict is final; otherwise the pair goes to an adjudicator,
+whose answer is final. Only the final answer is pushed to BDRC, by
+``dedup.sync_worker``, which retries while BDRC is unreachable. Items claimed before
+double review (``review_mode = single``) keep one annotator whose answer is final.
 """
 from __future__ import annotations
 
@@ -13,12 +17,27 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
 
+MODE_SINGLE = "single"
+MODE_DOUBLE = "double"
+SLOTS = (1, 2)
+
+ROLE_ANNOTATOR = "annotator"
+ROLE_ADJUDICATOR = "adjudicator"
+
+# How an adjudicated pair was settled.
+SIDED_WITH_1 = "sided_with_1"
+SIDED_WITH_2 = "sided_with_2"
+NEW_LABEL = "new_label"
+UNRESOLVED = "unresolved"
+
 # Sync states for a decision.
+# An annotator's answer on a double-review pair: kept here, never sent to BDRC.
+SYNC_LOCAL = "local"
 SYNC_PENDING = "pending"
 SYNC_RUNNING = "running"
 SYNC_SUCCEEDED = "succeeded"
@@ -51,21 +70,28 @@ class DedupItem(Base):
     # annotator saw even if BDRC's copy changes later (plan §5, decision.evidence_hash).
     evidence_hash: Mapped[str] = mapped_column(String, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    review_mode: Mapped[str] = mapped_column(String, nullable=False, default=MODE_DOUBLE, server_default=MODE_DOUBLE)
 
 
 class DedupAssignment(Base):
-    """Which annotator an item belongs to.
+    """One annotator slot on an item.
 
-    ``item_id`` is unique: one annotator per item. An admin reassigning later updates
-    ``user_id`` on the same row; ``assigned_by`` records who handed it out.
+    Up to two per item (``slot`` 1 and 2), never both to the same person. An admin
+    reassigning later updates ``user_id`` on the same row; ``assigned_by`` records who
+    handed it out.
     """
 
     __tablename__ = "dedup_assignments"
-    # Named to match the migration; also what stops two people claiming one item.
-    __table_args__ = (UniqueConstraint("item_id", name="uq_dedup_assignments_item_id"),)
+    # Named to match the migration; also what stops two people claiming one slot.
+    __table_args__ = (
+        UniqueConstraint("item_id", "slot", name="uq_dedup_assignments_item_slot"),
+        UniqueConstraint("item_id", "user_id", name="uq_dedup_assignments_item_user"),
+        CheckConstraint("slot IN (1, 2)", name="ck_dedup_assignments_slot"),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     item_id: Mapped[int] = mapped_column(Integer, ForeignKey("dedup_items.item_id"), nullable=False)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     batch_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     assigned_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
@@ -97,8 +123,13 @@ class DedupDecision(Base):
         Integer, ForeignKey("dedup_items.item_id"), nullable=False, index=True
     )
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String, nullable=False, default=ROLE_ANNOTATOR, server_default=ROLE_ANNOTATOR)
+    # The answer BDRC gets. False for an annotator's answer on a double-review pair.
+    is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    # Adjudicator's optional note on why they decided as they did.
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Exactly the fields sent to BDRC with PUT /review/items/{item_id}.
+    # The fields sent to BDRC with PUT /review/items/{item_id}.
     status: Mapped[str] = mapped_column(String, nullable=False)
     verdict: Mapped[str | None] = mapped_column(String, nullable=True)
     abstention_reason: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -120,3 +151,22 @@ class DedupDecision(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class DedupAdjudication(Base):
+    """A double-review pair whose two answers disagree (including any "can't answer").
+
+    Created when the second answer comes in. ``user_id`` is the adjudicator who took it
+    (first to open it); an admin can release it. Never one of the pair's annotators.
+    """
+
+    __tablename__ = "dedup_adjudications"
+
+    item_id: Mapped[int] = mapped_column(Integer, ForeignKey("dedup_items.item_id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    first_opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # sided_with_1 | sided_with_2 | new_label | unresolved (set with completed_at).
+    resolution: Mapped[str | None] = mapped_column(String, nullable=True)

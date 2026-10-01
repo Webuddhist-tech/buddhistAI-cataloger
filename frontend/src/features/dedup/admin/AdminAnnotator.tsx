@@ -41,7 +41,10 @@ export default function AdminAnnotator() {
   const reassign = useReassign();
 
   const person = annotators.data?.find((a) => a.user_id === userId);
-  const targets = (annotators.data ?? []).filter((a) => a.has_access && a.user_id !== userId);
+  // Adjudicators (reviewers) do not take annotation work.
+  const targets = (annotators.data ?? []).filter(
+    (a) => a.has_access && a.user_id !== userId && a.role !== 'reviewer',
+  );
   const targetPerson = targets.find((a) => a.user_id === target);
   const names = useMemo(() => batchNames(overview.data?.batches ?? []), [overview.data?.batches]);
 
@@ -69,11 +72,15 @@ export default function AdminAnnotator() {
       const res = await reassign.mutateAsync({
         itemIds: [...selected],
         toUserId: pending.kind === 'reassign' ? pending.to : null,
+        // Each pair has two annotators: only this person's place moves.
+        fromUserId: userId,
       });
       const verb = pending.kind === 'reassign' ? `moved to ${targetPerson?.name || targetPerson?.email}` : 'unassigned';
       toast.success(`${res.moved.length} ${res.moved.length === 1 ? 'pair' : 'pairs'} ${verb}`);
       if (res.skipped.length) {
-        toast.info(`${res.skipped.length} skipped: already answered or no longer assigned here`);
+        toast.info(
+          `${res.skipped.length} skipped: already answered, no longer assigned here, or the other person already holds the pair's second place`,
+        );
       }
       setSelected(new Set());
       setPending(null);
@@ -329,8 +336,8 @@ export default function AdminAnnotator() {
             </DialogTitle>
             <DialogDescription>
               {pending?.kind === 'reassign'
-                ? `They move from ${person?.name || person?.email || 'this annotator'}'s list to ${targetPerson?.name || targetPerson?.email}'s To do list.`
-                : `They leave ${person?.name || person?.email || 'this annotator'}'s list. The next annotator who clicks “Assign me work” gets them.`}
+                ? `They move from ${person?.name || person?.email || 'this annotator'}'s list to ${targetPerson?.name || targetPerson?.email}'s To do list. The pair's other annotator keeps their place.`
+                : `They leave ${person?.name || person?.email || 'this annotator'}'s list. The next annotator who clicks “Assign me work” gets them. The pair's other annotator keeps their place.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

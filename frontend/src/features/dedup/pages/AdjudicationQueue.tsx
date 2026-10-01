@@ -1,18 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { ArrowRight, Eye, Flag, Gavel, Lock, Settings } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Eye, ListChecks } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { MyItemsState, ReviewItem } from '../api/review';
-import { useAdjudicationQueue, useBatchName, useClaimItems, useMyItems } from '../hooks/useReview';
-import { hasIssue, isDecided, verdictLabel } from '../utils';
+import type { AdjudicationItem, AnnotatorAnswer, MyItemsState } from '../api/review';
+import { useAdjudicationQueue, useBatchName } from '../hooks/useReview';
+import { formatDateTime, verdictLabel } from '../utils';
 
 const STATE_TABS: { key: MyItemsState; label: string }[] = [
-  { key: 'all', label: 'All' },
   { key: 'open', label: 'To do' },
   { key: 'done', label: 'Done' },
+  { key: 'all', label: 'All' },
 ];
 
 const VERDICT_STYLE: Record<string, string> = {
@@ -20,41 +19,64 @@ const VERDICT_STYLE: Record<string, string> = {
   different: 'bg-red-50 text-red-700',
 };
 
-const isDone = (it: ReviewItem) => isDecided(it);
-
 type RowStatus = 'done' | 'progress' | 'new';
-// Done = answered (a reported problem alone is not an answer); "In progress" = opened but not answered.
-function rowStatus(it: ReviewItem): RowStatus {
-  if (isDone(it)) return 'done';
-  return it.assignment?.first_opened_at ? 'progress' : 'new';
+function rowStatus(it: AdjudicationItem): RowStatus {
+  if (it.adjudication.completed_at) return 'done';
+  return it.adjudication.first_opened_at ? 'progress' : 'new';
 }
-const STATUS_LABEL: Record<RowStatus, string> = { done: 'Done', progress: 'In progress', new: 'Not started' };
+const STATUS_LABEL: Record<RowStatus, string> = { done: 'Settled', progress: 'In progress', new: 'Waiting' };
 const STATUS_STYLE: Record<RowStatus, string> = {
   done: 'bg-green-50 text-green-700',
   progress: 'bg-amber-50 text-amber-800',
   new: 'bg-gray-100 text-gray-600',
 };
 
-export default function Queue() {
+/** How long a pair has been waiting, e.g. "3 h" or "2 d". */
+function waited(iso: string): string {
+  const t = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`).getTime();
+  const h = Math.max(0, Math.floor((Date.now() - t) / 3_600_000));
+  if (h < 1) return '< 1 h';
+  if (h < 48) return `${h} h`;
+  return `${Math.floor(h / 24)} d`;
+}
+
+function VerdictChip({ answer }: Readonly<{ answer: AnnotatorAnswer }>) {
+  const label = answer.verdict === 'not_sure' ? "Can't answer" : answer.verdict ? verdictLabel(answer.verdict) : '—';
+  return (
+    <span
+      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        (answer.verdict && VERDICT_STYLE[answer.verdict]) || 'bg-gray-100 text-gray-700'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Dispute({ item }: Readonly<{ item: AdjudicationItem }>) {
+  const [first, second] = item.annotations;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {first && <VerdictChip answer={first} />}
+      <span className="text-xs text-gray-400">vs</span>
+      {second && <VerdictChip answer={second} />}
+    </span>
+  );
+}
+
+// Disputed pairs for adjudicators (reviewers, and admins on pairs they did not annotate).
+export default function AdjudicationQueue() {
   const navigate = useNavigate();
   const batchName = useBatchName();
   const { user } = useUser();
-  const [state, setState] = useState<MyItemsState>('all');
+  const [state, setState] = useState<MyItemsState>('open');
   const [q, setQ] = useState('');
-  // Reviewers are the Deduplicator's adjudicators: they have no annotation work.
-  const isReviewer = user?.role === 'reviewer';
-  const isAdmin = user?.role === 'admin';
-
-  const items = useMyItems(state, undefined, !isReviewer);
-  const openItems = useMyItems('open', undefined, !isReviewer);
-  // Numbered from the full list so an item keeps its number in every tab.
-  const allItems = useMyItems('all', undefined, !isReviewer);
-  const toAdjudicate = useAdjudicationQueue('open', isAdmin);
+  const items = useAdjudicationQueue(state);
+  const allItems = useAdjudicationQueue('all');
   const numberOf = useMemo(
     () => new Map((allItems.data ?? []).map((it, i) => [it.item_id, i + 1])),
     [allItems.data],
   );
-  const claim = useClaimItems();
 
   const loaded = useMemo(() => items.data ?? [], [items.data]);
   const rows = useMemo(() => {
@@ -66,64 +88,28 @@ export default function Queue() {
         (it.evidence.b?.title_bo ?? '').toLowerCase().includes(needle),
     );
   }, [loaded, q]);
+  const openItem = (itemId: number) => navigate(`/dedup/adjudicate/${itemId}`);
 
-  const myOpen = openItems.data?.length ?? 0;
-  const openItem = (itemId: number) => navigate(`/dedup/item/${itemId}`);
-
-  const assignWork = async () => {
-    try {
-      const res = await claim.mutateAsync();
-      if (res.items.length === 0) toast.info('No items left to review right now');
-      else if (res.claimed > 0) toast.success(`${res.claimed} new items assigned to you`);
-    } catch (e) {
-      toast.error(`Could not assign work: ${(e as Error).message}`);
-    }
-  };
-
-  if (isReviewer) return <Navigate to="/dedup/adjudicate" replace />;
-
-  let emptyText = 'No items here.';
+  let emptyText = 'No pairs here.';
   if (q) emptyText = `No titles match “${q}”.`;
-  else if (state !== 'done') emptyText = 'Nothing to do right now. Click “Assign me work” to get your next set.';
+  else if (state === 'open') emptyText = 'Nothing to adjudicate right now. Pairs appear here when two annotators disagree.';
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Deduplicator</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">To adjudicate</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Review whether two texts are copies of the same work.
+            Pairs where the two annotators did not agree. Read the texts and give the final answer.
           </p>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
-        {isAdmin && (
+        {user?.role === 'admin' && (
           <Button asChild variant="outline" className="cursor-pointer">
-            <Link to="/dedup/adjudicate">
-              <Gavel className="h-4 w-4" /> To adjudicate
-              {(toAdjudicate.data?.length ?? 0) > 0 && (
-                <span className="rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-800 tabular-nums">
-                  {toAdjudicate.data?.length}
-                </span>
-              )}
+            <Link to="/dedup">
+              <ListChecks className="h-4 w-4" /> My items
             </Link>
           </Button>
         )}
-        {isAdmin && (
-          <Button asChild variant="outline" className="cursor-pointer">
-            <Link to="/dedup-admin">
-              <Settings className="h-4 w-4" /> Admin
-            </Link>
-          </Button>
-        )}
-        <Button
-          className="flex-1 cursor-pointer sm:flex-none"
-          onClick={assignWork}
-          disabled={claim.isPending || myOpen > 0}
-          title={myOpen > 0 ? 'Finish your current items first' : undefined}
-        >
-          {claim.isPending ? 'Assigning…' : 'Assign me work'}
-        </Button>
-        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -153,17 +139,14 @@ export default function Queue() {
 
       {items.error && (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load items: {items.error.message}
+          Could not load pairs: {items.error.message}
         </div>
       )}
 
       <ul className="space-y-2 sm:hidden">
         {items.isLoading &&
-          Array.from({ length: 4 }).map((_, i) => (
-            <li key={i} className="h-28 animate-pulse rounded-lg bg-gray-100" />
-          ))}
+          Array.from({ length: 4 }).map((_, i) => <li key={i} className="h-28 animate-pulse rounded-lg bg-gray-100" />)}
         {rows.map((it) => {
-          const done = isDone(it);
           const status = rowStatus(it);
           return (
             <li key={it.item_id}>
@@ -186,20 +169,8 @@ export default function Queue() {
                   {it.evidence.b?.title_bo || '—'}
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
-                  <DecisionBadge item={it} />
-                  <span
-                    className={`inline-flex items-center gap-1 text-sm font-medium ${done ? 'text-gray-600' : 'text-blue-700'}`}
-                  >
-                    {done ? (
-                      <>
-                        <Eye className="h-3.5 w-3.5" /> View
-                      </>
-                    ) : (
-                      <>
-                        Review <ArrowRight className="h-3.5 w-3.5" />
-                      </>
-                    )}
-                  </span>
+                  <Dispute item={it} />
+                  <span className="text-xs text-gray-500">waiting {waited(it.adjudication.created_at)}</span>
                 </div>
               </button>
             </li>
@@ -216,9 +187,10 @@ export default function Queue() {
             <tr>
               <th className="w-16 px-4 py-3 font-medium">No.</th>
               <th className="px-4 py-3 font-medium">Texts</th>
-              <th className="hidden px-4 py-3 font-medium md:table-cell">Batch</th>
+              <th className="px-4 py-3 font-medium">Annotators said</th>
               <th className="px-4 py-3 font-medium">Status</th>
-              <th className="hidden px-4 py-3 font-medium sm:table-cell">Decision</th>
+              <th className="hidden px-4 py-3 font-medium md:table-cell">Final answer</th>
+              <th className="hidden px-4 py-3 font-medium lg:table-cell">Waiting since</th>
               <th className="w-32 px-4 py-3" />
             </tr>
           </thead>
@@ -226,41 +198,49 @@ export default function Queue() {
             {items.isLoading &&
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={6} className="px-4 py-3">
+                  <td colSpan={7} className="px-4 py-3">
                     <div className="h-10 animate-pulse rounded bg-gray-100" />
                   </td>
                 </tr>
               ))}
             {rows.map((it) => {
-              const done = isDone(it);
               const status = rowStatus(it);
+              const done = status === 'done';
               return (
-                <tr
-                  key={it.item_id}
-                  onClick={() => openItem(it.item_id)}
-                  className="cursor-pointer transition-colors hover:bg-gray-50"
-                >
+                <tr key={it.item_id} onClick={() => openItem(it.item_id)} className="cursor-pointer transition-colors hover:bg-gray-50">
                   <td className="px-4 py-4 tabular-nums text-gray-500" title={`Item ${it.item_id}`}>
                     {numberOf.get(it.item_id) ?? '—'}
                   </td>
                   <td className="px-4 py-4">
-                    <div className="font-monlam text-base leading-relaxed text-gray-900">
-                      {it.evidence.a?.title_bo || '—'}
-                    </div>
-                    <div className="font-monlam text-sm leading-relaxed text-gray-500">
-                      {it.evidence.b?.title_bo || '—'}
-                    </div>
+                    <div className="font-monlam text-base leading-relaxed text-gray-900">{it.evidence.a?.title_bo || '—'}</div>
+                    <div className="font-monlam text-sm leading-relaxed text-gray-500">{it.evidence.b?.title_bo || '—'}</div>
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-4 text-sm text-gray-600 md:table-cell" title={it.batch_id}>
-                    {batchName(it.batch_id)}
+                  <td className="px-4 py-4">
+                    <Dispute item={it} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-4">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
                       {STATUS_LABEL[status]}
                     </span>
                   </td>
-                  <td className="hidden whitespace-nowrap px-4 py-4 sm:table-cell">
-                    <DecisionBadge item={it} />
+                  <td className="hidden whitespace-nowrap px-4 py-4 md:table-cell">
+                    {it.verdict ? (
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          VERDICT_STYLE[it.verdict] ?? 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {it.verdict === 'not_sure' ? 'Unresolved' : verdictLabel(it.verdict)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td
+                    className="hidden whitespace-nowrap px-4 py-4 text-gray-600 lg:table-cell"
+                    title={formatDateTime(it.adjudication.created_at)}
+                  >
+                    {waited(it.adjudication.created_at)}
                   </td>
                   <td className="px-4 py-4 text-right">
                     <Button
@@ -282,7 +262,7 @@ export default function Queue() {
                         </>
                       ) : (
                         <>
-                          Review <ArrowRight className="h-3.5 w-3.5" />
+                          Adjudicate <ArrowRight className="h-3.5 w-3.5" />
                         </>
                       )}
                     </Button>
@@ -292,59 +272,20 @@ export default function Queue() {
             })}
           </tbody>
         </table>
-
-        {!items.isLoading && rows.length === 0 && (
-          <p className="py-12 text-center text-sm text-gray-500">{emptyText}</p>
-        )}
+        {!items.isLoading && rows.length === 0 && <p className="py-12 text-center text-sm text-gray-500">{emptyText}</p>}
       </div>
 
       <div className="mt-3 text-sm text-gray-600">
         {q ? (
           <>
-            {rows.length} {rows.length === 1 ? 'match' : 'matches'} in {loaded.length} items
+            {rows.length} {rows.length === 1 ? 'match' : 'matches'} in {loaded.length} pairs
           </>
         ) : (
           <>
-            <strong className="text-gray-900">{loaded.length}</strong> {loaded.length === 1 ? 'item' : 'items'}
+            <strong className="text-gray-900">{loaded.length}</strong> {loaded.length === 1 ? 'pair' : 'pairs'}
           </>
         )}
       </div>
     </div>
   );
-}
-
-function DecisionBadge({ item }: { item: ReviewItem }) {
-  const problem = hasIssue(item) && (
-    <span title="Data problem reported">
-      <Flag className="inline h-3.5 w-3.5 text-amber-600" aria-label="Data problem reported" />
-    </span>
-  );
-  const locked = item.locked && (
-    <span title="Both annotators have answered, so this answer is locked">
-      <Lock className="inline h-3.5 w-3.5 text-gray-400" aria-label="Locked" />
-    </span>
-  );
-  if (item.verdict) {
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            VERDICT_STYLE[item.verdict] ?? 'bg-gray-100 text-gray-700'
-          }`}
-        >
-          {verdictLabel(item.verdict)}
-        </span>
-        {problem}
-        {locked}
-      </span>
-    );
-  }
-  if (problem) {
-    return (
-      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-        Problem reported · needs an answer
-      </span>
-    );
-  }
-  return <span className="text-gray-300">—</span>;
 }
