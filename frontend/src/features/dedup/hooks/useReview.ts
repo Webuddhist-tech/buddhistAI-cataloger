@@ -124,6 +124,8 @@ export function useItem(itemId: number | undefined) {
       return opened;
     },
     enabled: valid && !alreadyOpened,
+    // Not this user's pair: the page switches to the read-only view at once.
+    retry: false,
     // Shown at once while the first opening is recorded. Unlike initialData it is not
     // cached, so it cannot stop that request from being sent.
     placeholderData: fromList,

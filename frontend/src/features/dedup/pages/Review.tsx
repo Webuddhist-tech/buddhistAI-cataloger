@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Flag, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -188,6 +188,13 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [dialog, fullText, askPreferred, decide, reportProblem, goTo, prevId, nextId, locked]);
+
+  // Someone else's pair (e.g. a link copied from the address bar into a spreadsheet):
+  // show the read-only page instead of a work page they cannot use.
+  const notMine = itemQuery.error != null || (item != null && !itemQuery.isPlaceholderData && item.assignment == null);
+  if (!adjudicate && notMine) {
+    return <Navigate to={`/dedup/pair/${itemIdParam}`} replace />;
+  }
 
   if (itemQuery.isLoading) {
     return <div className="py-24 text-center text-gray-500">Loading item…</div>;
