@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { WitnessCard } from '../api/review';
+import { formatNumber } from '../utils';
 import { SourceBadge } from './SourceBadge';
 
 // After "Same work": the plan's preferred access witness (§6.5, Screen 3). Not "which
@@ -27,6 +29,7 @@ type Props = {
 };
 
 export default function PreferredCopyDialog({ open, onOpenChange, a, b, current, onPick }: Readonly<Props>) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
 
   const pick = async (mwId: PreferredChoice) => {
@@ -60,8 +63,8 @@ export default function PreferredCopyDialog({ open, onOpenChange, a, b, current,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Which copy is better?</DialogTitle>
-          <DialogDescription>The more complete and faithful one.</DialogDescription>
+          <DialogTitle>{t('dedup.preferred.title')}</DialogTitle>
+          <DialogDescription>{t('dedup.preferred.description')}</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -77,15 +80,15 @@ export default function PreferredCopyDialog({ open, onOpenChange, a, b, current,
           }`}
         >
           <span>
-            <span className="block font-medium text-gray-900">No preference</span>
-            <span className="block text-xs text-gray-500">Equally good, or can&rsquo;t tell.</span>
+            <span className="block font-medium text-gray-900">{t('dedup.preferred.noPreference')}</span>
+            <span className="block text-xs text-gray-500">{t('dedup.preferred.noPreferenceHelp')}</span>
           </span>
           <Kbd>N</Kbd>
         </button>
 
         <DialogFooter>
           <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('dedup.common.cancel')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -100,6 +103,7 @@ function CopyOption({
   disabled,
   onClick,
 }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard; selected: boolean; disabled: boolean; onClick: () => void }>) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -115,11 +119,11 @@ function CopyOption({
         <Kbd>{tag}</Kbd>
       </span>
       <span className="break-words font-monlam text-base leading-relaxed text-gray-900">
-        {card.title_bo || <span className="font-sans text-sm italic text-gray-400">no title</span>}
+        {card.title_bo || <span className="font-sans text-sm italic text-gray-400">{t('dedup.witness.noTitle')}</span>}
       </span>
       <span className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
         <SourceBadge source={card.etext_source} />
-        <span className="tabular-nums">{(card.text_length ?? 0).toLocaleString()} characters</span>
+        <span className="tabular-nums">{t('dedup.witness.characters', { n: formatNumber(card.text_length ?? 0) })}</span>
       </span>
     </button>
   );

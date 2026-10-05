@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Flag, Lock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +22,7 @@ import {
   useSaveAdjudication,
   useSaveDecision,
 } from '../hooks/useReview';
-import { ISSUE_LABEL, hasIssue, isDecided, verdictLabel } from '../utils';
+import { formatNumber, hasIssue, isDecided, issueLabel, verdictLabel } from '../utils';
 
 const CONFIDENCE = [1, 2, 3, 4, 5];
 // The shared Button has no pointer cursor; added here to leave other features untouched.
@@ -36,6 +37,7 @@ export type ReviewMode = 'annotate' | 'adjudicate';
 // `adjudicate`: the same screen for a disputed pair, with both annotators' answers above
 // the texts and an optional note. The adjudicator's answer is final.
 export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMode }>) {
+  const { t } = useTranslation();
   const adjudicate = mode === 'adjudicate';
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
@@ -119,11 +121,11 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
         // Reporting a problem on an answered pair stays here; answering moves on.
         if (fields.verdict) advanceTimer.current = window.setTimeout(() => goTo(nextId), 250);
       } catch (e) {
-        toast.error(`Could not save: ${(e as Error).message}`);
+        toast.error(t('dedup.review.saveFailed', { error: (e as Error).message }));
         throw e;
       }
     },
-    [item, confidence, adjudicate, note, saveAdjudication, saveAnswer, goTo, nextId, commitActiveTime],
+    [item, confidence, adjudicate, note, saveAdjudication, saveAnswer, goTo, nextId, commitActiveTime, t],
   );
 
   // A note on an answer already saved goes with that same answer.
@@ -139,9 +141,9 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
           note: note.trim() || null,
         },
       })
-      .then(() => toast.success('Note saved'))
-      .catch((e: Error) => toast.error(`Could not save: ${e.message}`));
-  }, [item, note, saveAdjudication]);
+      .then(() => toast.success(t('dedup.review.noteSaved')))
+      .catch((e: Error) => toast.error(t('dedup.review.saveFailed', { error: e.message })));
+  }, [item, note, saveAdjudication, t]);
 
   const decide = useCallback(
     (verdict: 'same' | 'different') => {
@@ -162,10 +164,10 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   // A data problem is reported alongside an answer (plan §5), so the pair needs one first.
   const answered = Boolean(item && isDecided(item));
   const reportProblem = useCallback(() => {
-    if (locked) toast.info('Both annotators have answered, so this pair is locked.');
+    if (locked) toast.info(t('dedup.review.lockedInfo'));
     else if (answered) setDialog('issue');
-    else toast.info('Answer the pair first. Contains and Can’t answer can include a data problem directly.');
-  }, [answered, locked]);
+    else toast.info(t('dedup.review.answerFirst'));
+  }, [answered, locked, t]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,13 +199,13 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   }
 
   if (itemQuery.isLoading) {
-    return <div className="py-24 text-center text-gray-500">Loading item…</div>;
+    return <div className="py-24 text-center text-gray-500">{t('dedup.review.loading')}</div>;
   }
   if (itemQuery.error || !item) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-12">
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load item {itemIdParam}: {itemQuery.error?.message ?? 'not found'}
+          {t('dedup.review.loadFailed', { id: itemIdParam, error: itemQuery.error?.message ?? t('dedup.review.notFound') })}
         </div>
       </div>
     );
@@ -218,11 +220,11 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   const preferred = item.partner_payload?.preferred_mw_id as PreferredChoice | undefined;
   let preferredNote = '';
   if (item.verdict === 'same' && preferred !== undefined) {
-    if (preferred === null) preferredNote = ' · no preference';
-    else preferredNote = preferred === cardA.mw_id ? ' · A is better' : ' · B is better';
+    if (preferred === null) preferredNote = ` · ${t('dedup.review.noPreference')}`;
+    else preferredNote = ` · ${t(preferred === cardA.mw_id ? 'dedup.review.aBetter' : 'dedup.review.bBetter')}`;
   }
   const recorded = item.verdict ? verdictLabel(item.verdict) + preferredNote : null;
-  const problems = hasIssue(item) ? item.issues!.map((i) => ISSUE_LABEL[i.kind] ?? i.kind) : [];
+  const problems = hasIssue(item) ? item.issues!.map((i) => issueLabel(i.kind)) : [];
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6" style={{ paddingBottom: barHeight + 24 }}>
@@ -231,21 +233,21 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
           to={adjudicate ? '/dedup/adjudicate' : '/dedup'}
           className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
         >
-          <ArrowLeft className="h-4 w-4" /> {adjudicate ? 'To adjudicate' : 'My items'}
+          <ArrowLeft className="h-4 w-4" /> {t(adjudicate ? 'dedup.adjudicationQueue.title' : 'dedup.review.myItems')}
           <span className="ml-1 text-xs text-gray-400" title={item.batch_id}>· {batchName(item.batch_id)}</span>
         </Link>
         <div className="flex items-center gap-2">
           <CopyPairLink itemId={item.item_id} />
           {index >= 0 && (
             <span className="mr-1 text-xs tabular-nums text-gray-500">
-              Item {index + 1} of {total}
+              {t('dedup.review.position', { n: formatNumber(index + 1), total: formatNumber(total) })}
             </span>
           )}
-          <Button variant="outline" size="sm" className={PTR} onClick={() => goTo(prevId)} disabled={prevId == null} aria-label="Previous item">
-            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Previous</span>
+          <Button variant="outline" size="sm" className={PTR} onClick={() => goTo(prevId)} disabled={prevId == null} aria-label={t('dedup.review.previousItem')}>
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">{t('dedup.review.previous')}</span>
           </Button>
-          <Button variant="outline" size="sm" className={PTR} onClick={() => goTo(nextId)} disabled={nextId == null} aria-label="Next item">
-            <span className="hidden sm:inline">Next</span> <ArrowRight className="h-4 w-4" />
+          <Button variant="outline" size="sm" className={PTR} onClick={() => goTo(nextId)} disabled={nextId == null} aria-label={t('dedup.review.nextItem')}>
+            <span className="hidden sm:inline">{t('dedup.review.next')}</span> <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -257,20 +259,20 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
       {adjudicate && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
           <label htmlFor="adjudication-note" className="text-sm font-medium text-gray-700">
-            Note <span className="font-normal text-gray-400">(optional)</span>
+            {t('dedup.review.note')} <span className="font-normal text-gray-400">{t('dedup.cantAnswer.optional')}</span>
           </label>
           <Textarea
             id="adjudication-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Why you decided this way, e.g. what the annotators missed"
+            placeholder={t('dedup.review.notePlaceholder')}
             maxLength={2000}
             className="mt-1.5 min-h-[64px] text-sm"
           />
           {answered && note.trim() !== (adjItem?.note ?? '') && (
             <div className="mt-2 flex justify-end">
               <Button size="sm" variant="outline" className={PTR} onClick={saveNote} disabled={save.isPending}>
-                Save note
+                {t('dedup.review.saveNote')}
               </Button>
             </div>
           )}
@@ -286,12 +288,12 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
           <div className="border-b border-gray-100 bg-gray-50/80">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-xs sm:px-6 lg:px-8">
               {save.isPending ? (
-                <span className="text-gray-500">Saving…</span>
+                <span className="text-gray-500">{t('dedup.common.saving')}</span>
               ) : (
                 recorded && (
                   <span className="inline-flex items-center gap-1.5 text-gray-600">
                     <Check className="h-3.5 w-3.5 text-green-600" />
-                    {adjudicate ? 'Final answer' : 'Saved'} <span className="font-medium text-gray-900">{recorded}</span>
+                    {t(adjudicate ? 'dedup.review.finalAnswer' : 'dedup.review.saved')} <span className="font-medium text-gray-900">{recorded}</span>
                   </span>
                 )
               )}
@@ -304,7 +306,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
                   <span className="truncate">{p}</span>
                 </span>
               ))}
-              {!answered && problems.length > 0 && <span className="text-amber-800">Needs an answer</span>}
+              {!answered && problems.length > 0 && <span className="text-amber-800">{t('dedup.review.needsAnswer')}</span>}
               {locked && (
                 <span className="inline-flex items-center gap-1.5 text-gray-600">
                   <Lock className="h-3.5 w-3.5" /> Both annotators have answered, so this answer is locked
@@ -316,10 +318,10 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
                   onClick={reportProblem}
                   disabled={save.isPending}
                   className={`${PTR} ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-gray-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-50`}
-                  title="Add a data problem to this answer"
+                  title={t('dedup.review.reportTitle')}
                 >
                   <Flag className="h-3.5 w-3.5" />
-                  {problems.length ? 'Report another problem' : 'Report a data problem'}
+                  {t(problems.length ? 'dedup.review.reportAnother' : 'dedup.review.reportProblem')}
                   <Kbd>X</Kbd>
                 </button>
               )}
@@ -340,7 +342,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
               disabled={save.isPending || locked}
               aria-pressed={isChosen('same')}
             >
-              {tick('same')} Same work <Kbd>J</Kbd>
+              {tick('same')} {t('dedup.verdict.same')} <Kbd>J</Kbd>
             </Button>
             <Button
               variant="outline"
@@ -353,7 +355,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
               disabled={save.isPending || locked}
               aria-pressed={isChosen('different')}
             >
-              {tick('different')} Different <Kbd>F</Kbd>
+              {tick('different')} {t('dedup.verdict.different')} <Kbd>F</Kbd>
             </Button>
             <Button
               variant="outline"
@@ -362,7 +364,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
               disabled={save.isPending || locked}
               aria-pressed={isChosen('contains', 'part_of')}
             >
-              {tick('contains', 'part_of')} Contains / part-of <Kbd>C</Kbd>
+              {tick('contains', 'part_of')} {t('dedup.cantAnswer.group.contains.title')} <Kbd>C</Kbd>
             </Button>
             <Button
               variant="outline"
@@ -371,12 +373,12 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
               disabled={save.isPending || locked}
               aria-pressed={isChosen('not_sure')}
             >
-              {tick('not_sure')} Can&rsquo;t answer <Kbd>Space</Kbd>
+              {tick('not_sure')} {t('dedup.answer.cantAnswer')} <Kbd>{t('dedup.review.spaceKey')}</Kbd>
             </Button>
           </div>
 
           <div className="flex items-center justify-center gap-1.5 sm:justify-start lg:ml-auto">
-            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Confidence</span>
+            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">{t('dedup.review.confidence')}</span>
             {CONFIDENCE.map((n) => (
               <button
                 key={n}
@@ -387,7 +389,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
                     ? 'border-gray-900 bg-gray-900 text-white'
                     : 'border-gray-300 text-gray-600 hover:border-gray-500'
                 }`}
-                title={`Confidence ${n} of 5`}
+                title={t('dedup.review.confidenceN', { n: formatNumber(n) })}
                 aria-pressed={confidence === n}
               >
                 {n}

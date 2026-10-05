@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import CopyPairLink from '../components/CopyPairLink';
 import FullTextDialog, { type FullTextView } from '../components/FullTextDialog';
@@ -9,6 +10,7 @@ import { useBatchName, usePair } from '../hooks/useReview';
 // answer buttons and nobody's answer, so it is safe to share while a pair is still being
 // reviewed, and clean for screenshots. Opens for any logged-in account.
 export default function PairView() {
+  const { t } = useTranslation();
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
   const pair = usePair(itemId);
@@ -16,13 +18,13 @@ export default function PairView() {
   const [fullText, setFullText] = useState<FullTextView | null>(null);
 
   if (pair.isLoading) {
-    return <div className="py-24 text-center text-gray-500">Loading pair…</div>;
+    return <div className="py-24 text-center text-gray-500">{t('dedup.pairView.loading')}</div>;
   }
   if (pair.error || !pair.data) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-12">
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load pair {itemIdParam}: {pair.error?.message ?? 'not found'}
+          {t('dedup.pairView.loadFailed', { id: itemIdParam, error: pair.error?.message ?? t('dedup.review.notFound') })}
         </div>
       </div>
     );
@@ -36,9 +38,9 @@ export default function PairView() {
     <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-4 sm:px-6 sm:pt-6 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Pair {p.item_id}</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{t('dedup.pairView.title', { id: p.item_id })}</h1>
           <p className="text-xs text-gray-500" title={p.batch_id}>
-            {batchName(p.batch_id)} · read-only view
+            {batchName(p.batch_id)} · {t('dedup.pairView.readOnly')}
           </p>
         </div>
         <CopyPairLink itemId={p.item_id} />

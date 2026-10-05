@@ -753,5 +753,549 @@
       "personId": "Person ID",
       "mergedAuthor": "Duplicate merged into this author"
     }
+  },
+  "dedup": {
+    "batch": {
+      "ordinal1": "First batch",
+      "ordinal2": "Second batch",
+      "ordinal3": "Third batch",
+      "ordinal4": "Fourth batch",
+      "ordinal5": "Fifth batch",
+      "ordinal6": "Sixth batch",
+      "ordinal7": "Seventh batch",
+      "ordinal8": "Eighth batch",
+      "ordinal9": "Ninth batch",
+      "ordinal10": "Tenth batch",
+      "numbered": "Batch {{n}}"
+    },
+    "verdict": {
+      "same": "Same work",
+      "different": "Different",
+      "contains": "A contains B",
+      "part_of": "B contains A",
+      "not_sure": "Not sure",
+      "source_dup": "Source duplicate"
+    },
+    "overlap": {
+      "strong": "Strong overlap — likely the same work",
+      "partial": "Partial overlap — needs your decision",
+      "weak": "Weak overlap — read both carefully"
+    },
+    "source": {
+      "tei": "Typed transcription",
+      "paddleocr_v2": "Scanned · OCR"
+    },
+    "abstention": {
+      "insufficient_evidence": "Can't tell from what's shown",
+      "genuinely_ambiguous": "Genuinely ambiguous",
+      "needs_image_or_metadata": "Needs scans or catalogue details",
+      "technical_failure": "Text garbled or unreadable",
+      "out_of_scope": "Outside this review"
+    },
+    "resolution": {
+      "sided_with_1": "Agreed with annotator 1",
+      "sided_with_2": "Agreed with annotator 2",
+      "new_label": "Chose a different answer",
+      "unresolved": "Unresolved (also could not answer)"
+    },
+    "answer": {
+      "cantAnswer": "Can't answer",
+      "detail": {
+        "contains": "A contains B",
+        "part_of": "B contains A",
+        "source_dup": "Same source entered twice"
+      }
+    },
+    "answerGroup": {
+      "same": "Same",
+      "different": "Different",
+      "contains": "Contains / part of",
+      "cantAnswer": "Can't answer"
+    },
+    "issue": {
+      "author_conflict": "Authors conflict",
+      "wrong_author": "Author is wrong",
+      "undersegmented": "One text holds several works",
+      "oversegmented": "One work split across documents",
+      "convention": "Divided at different places",
+      "anthology_suspected": "Looks like an anthology",
+      "source_dup": "Passage repeated inside a text",
+      "other": "Other problem"
+    },
+    "duration": {
+      "seconds": "{{s}} s",
+      "minutes": "{{m}} min {{s}} s",
+      "hours": "{{h}} h {{m}} min"
+    },
+    "witness": {
+      "characters": "{{n}} characters",
+      "scannedPages": "Scanned pages",
+      "noScan": "no scan",
+      "noTitle": "no title",
+      "noAuthor": "no author",
+      "fullText": "Full text",
+      "showLess": "Show less",
+      "loadingFullText": "Loading full text…",
+      "fullTextUnavailable": "Full text not available.",
+      "opening": "Opening",
+      "noText": "no text returned",
+      "showFullText": "Show full text",
+      "moreCharacters": "{{n}} more characters",
+      "ending": "Ending"
+    },
+    "copyLink": {
+      "copied": "Link copied",
+      "failed": "Could not copy. Copy it from here: {{link}}",
+      "title": "Copy a link to this pair (read-only: no answers, no buttons)",
+      "ariaLabel": "Copy link to this pair",
+      "label": "Copy link"
+    },
+    "common": {
+      "yes": "yes",
+      "no": "no",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save",
+      "close": "Close",
+      "noTitleMatch": "No titles match “{{q}}”.",
+      "searchTitles": "Search titles…",
+      "itemId": "Item {{id}}",
+      "view": "View",
+      "texts": "Texts",
+      "batch": "Batch",
+      "status": "Status",
+      "matchesIn_one": "{{n}} match in {{total}}",
+      "matchesIn_other": "{{n}} matches in {{total}}",
+      "number": "No."
+    },
+    "evidence": {
+      "sharedWording": "shared wording",
+      "fullTextsShort": "Full texts",
+      "compareFullTexts": "Compare full texts",
+      "differencesShort": "Differences",
+      "showDifferences": "Show differences",
+      "authorConflictTitle": "These two share a title but list different authors.",
+      "authorConflictBody": "The author data cannot settle this: judge by the texts, then use “{{report}}” to report “{{issue}}”.",
+      "showDetails": "Show similarity details",
+      "textAId": "Text A id",
+      "textBId": "Text B id",
+      "metric": {
+        "sharedWording": "Shared wording",
+        "sharedWordingNote": "Jaccard",
+        "containment": "Containment",
+        "containmentNote": "how much of the shorter is in the longer",
+        "openingSimilarity": "Opening similarity",
+        "endingSimilarity": "Ending similarity",
+        "titleMatch": "Title match",
+        "authorMatch": "Author match",
+        "noAuthorData": "no author data",
+        "lengthRatio": "Length ratio",
+        "lengthRatioNote": "1.00 = same length",
+        "sameScan": "Same scan",
+        "sameScanNote": "both from one reproduction"
+      }
+    },
+    "annotatorAnswers": {
+      "title": "Annotator answers",
+      "bothUnsure": "neither annotator could decide.",
+      "disagreed": "they did not agree. Your answer is final.",
+      "noPreferredCopy": "No preferred copy",
+      "aBetter": "A is the better copy",
+      "bBetter": "B is the better copy",
+      "annotatorN": "Annotator {{n}}",
+      "confidenceTitle": "Confidence, 1 to 5",
+      "confidence": "confidence {{n}}/5"
+    },
+    "preferred": {
+      "title": "Which copy is better?",
+      "description": "The more complete and faithful one.",
+      "noPreference": "No preference",
+      "noPreferenceHelp": "Equally good, or can’t tell."
+    },
+    "cantAnswer": {
+      "group": {
+        "contains": {
+          "title": "Contains / part-of",
+          "description": "One text is inside the other, or both are the same source entered twice."
+        },
+        "default": {
+          "title": "Can't answer",
+          "description": "Pick the reason you cannot decide this pair."
+        }
+      },
+      "option": {
+        "a_contains_b": {
+          "label": "A contains B",
+          "help": "B is an excerpt or chapter of A."
+        },
+        "b_contains_a": {
+          "label": "B contains A",
+          "help": "A is an excerpt or chapter of B."
+        },
+        "source_dup_verdict": {
+          "label": "Same source entered twice",
+          "help": "Both come from the same scan or volume: a duplicate entry, not a separate edition."
+        },
+        "insufficient_evidence": {
+          "label": "Can't tell from what's shown",
+          "help": "Not enough to judge, even with the full texts."
+        },
+        "genuinely_ambiguous": {
+          "label": "Genuinely ambiguous",
+          "help": "I read both and still cannot say."
+        },
+        "needs_image_or_metadata": {
+          "label": "Need the scans or catalogue details",
+          "help": "Deciding would need the page images or more information than is shown."
+        },
+        "technical_failure": {
+          "label": "Text is garbled or unreadable",
+          "help": "OCR noise, empty text, or broken encoding."
+        },
+        "out_of_scope": {
+          "label": "Outside this review",
+          "help": "This pair is not something this review can decide."
+        }
+      },
+      "issueHelp": {
+        "author_conflict": "Same text, but the two list different authors.",
+        "wrong_author": "The listed author is simply incorrect.",
+        "undersegmented": "This document should have been split.",
+        "oversegmented": "These are fragments of a single work.",
+        "convention": "The same work, but the two are split by different segmentation conventions.",
+        "anthology_suspected": "A text seems to contain many unrelated works.",
+        "source_dup": "A block of text is copied twice within one document (an import error).",
+        "other": "Describe it in the note."
+      },
+      "problem": "Problem",
+      "whichText": "Which text?",
+      "both": "Both",
+      "aOnly": "A only",
+      "bOnly": "B only",
+      "noteRequired": "Note (required)",
+      "noteOptional": "Note (optional)",
+      "reportTitle": "Report a data problem",
+      "reportDescription": "Added to your answer, which stays as it is. Reported for fixing later.",
+      "reportDescriptionWithAnswer": "Added to your answer ({{answer}}), which stays as it is. Reported for fixing later.",
+      "alsoReport": "Also report a data problem",
+      "optional": "(optional)",
+      "alreadyReported": "Already reported: {{list}}",
+      "dataProblem": "Data problem",
+      "reportButton": "Report problem"
+    },
+    "fullText": {
+      "dialogLabel": "Full texts",
+      "scrollHint": "Each side scrolls on its own",
+      "textTab": "Text {{tag}}"
+    },
+    "diff": {
+      "layout": "Layout",
+      "split": "Split",
+      "unified": "Unified",
+      "splitTitle": "A and B next to each other",
+      "unifiedTitle": "A and B in one column",
+      "percentSame": "{{pct}}% the same",
+      "changes_one": "{{n}} change",
+      "changes_other": "{{n}} changes",
+      "showPunctuation": "Show punctuation differences",
+      "compareBy": "Compare by",
+      "granularity": {
+        "syllable": "Syllable",
+        "char": "Character",
+        "line": "Line"
+      },
+      "comparing": "Comparing the two texts…",
+      "failed": "Could not compare the texts.",
+      "notIn": "Not in {{copy}}",
+      "unchangedLines_one": "{{n}} unchanged line",
+      "unchangedLines_other": "{{n}} unchanged lines",
+      "show": "Show"
+    },
+    "queue": {
+      "noneLeft": "No items left to review right now",
+      "assigned_one": "{{n}} new item assigned to you",
+      "assigned_other": "{{n}} new items assigned to you",
+      "assignFailed": "Could not assign work: {{error}}",
+      "empty": "No items here.",
+      "emptyToDo": "Nothing to do right now. Click “{{button}}” to get your next set.",
+      "title": "Deduplicator",
+      "subtitle": "Review whether two texts are copies of the same work.",
+      "admin": "Admin",
+      "finishFirst": "Finish your current items first",
+      "assigning": "Assigning…",
+      "assignWork": "Assign me work",
+      "tab": {
+        "all": "All",
+        "open": "To do",
+        "done": "Done"
+      },
+      "loadFailed": "Could not load items: {{error}}",
+      "review": "Review",
+      "status": {
+        "done": "Done",
+        "progress": "In progress",
+        "new": "Not started"
+      },
+      "decision": "Decision",
+      "itemCount_one": "{{n}} item",
+      "itemCount_other": "{{n}} items",
+      "problemReported": "Data problem reported",
+      "lockedTitle": "Both annotators have answered, so this answer is locked",
+      "locked": "Locked",
+      "problemNeedsAnswer": "Problem reported · needs an answer"
+    },
+    "review": {
+      "saveFailed": "Could not save: {{error}}",
+      "noteSaved": "Note saved",
+      "lockedInfo": "Both annotators have answered, so this pair is locked.",
+      "answerFirst": "Answer the pair first. Contains and Can’t answer can include a data problem directly.",
+      "loading": "Loading item…",
+      "loadFailed": "Could not load item {{id}}: {{error}}",
+      "notFound": "not found",
+      "noPreference": "no preference",
+      "aBetter": "A is better",
+      "bBetter": "B is better",
+      "myItems": "My items",
+      "position": "Item {{n}} of {{total}}",
+      "previousItem": "Previous item",
+      "previous": "Previous",
+      "nextItem": "Next item",
+      "next": "Next",
+      "note": "Note",
+      "notePlaceholder": "Why you decided this way, e.g. what the annotators missed",
+      "saveNote": "Save note",
+      "finalAnswer": "Final answer",
+      "saved": "Saved",
+      "needsAnswer": "Needs an answer",
+      "reportTitle": "Add a data problem to this answer",
+      "reportAnother": "Report another problem",
+      "reportProblem": "Report a data problem",
+      "spaceKey": "Space",
+      "confidence": "Confidence",
+      "confidenceN": "Confidence {{n}} of 5"
+    },
+    "adjudicationQueue": {
+      "title": "To adjudicate",
+      "subtitle": "Pairs where the two annotators did not agree. Read the texts and give the final answer.",
+      "waitedUnderHour": "< 1 h",
+      "waitedHours": "{{n}} h",
+      "waitedDays": "{{n}} d",
+      "vs": "vs",
+      "empty": "No pairs here.",
+      "emptyToDo": "Nothing to adjudicate right now. Pairs appear here when two annotators disagree.",
+      "loadFailed": "Could not load pairs: {{error}}",
+      "status": {
+        "done": "Settled",
+        "progress": "In progress",
+        "new": "Waiting"
+      },
+      "waiting": "waiting {{time}}",
+      "annotatorsSaid": "Annotators said",
+      "waitingSince": "Waiting since",
+      "unresolved": "Unresolved",
+      "adjudicate": "Adjudicate",
+      "pairCount_one": "{{n}} pair",
+      "pairCount_other": "{{n}} pairs"
+    },
+    "pairView": {
+      "loading": "Loading pair…",
+      "loadFailed": "Could not load pair {{id}}: {{error}}",
+      "title": "Pair {{id}}",
+      "readOnly": "read-only view"
+    },
+    "admin": {
+      "overview": {
+        "title": "Progress",
+        "subtitle": "Across all annotators",
+        "stat": {
+          "givenOut": "Given out",
+          "givenOutTip": "Pairs annotators have taken with “Assign me work”, or that an admin gave them. Each pair is given to two annotators, so it counts twice.",
+          "answered": "Answered",
+          "answeredTip": "Answered: same, different, contains, or can't answer. A reported data problem comes with an answer.",
+          "opened": "Opened",
+          "openedTip": "The annotator opened the pair but has not answered yet.",
+          "notOpened": "Not opened",
+          "notOpenedTip": "Given to an annotator who has not opened it yet.",
+          "awaitingSecond": "Waiting for 2nd annotator",
+          "awaitingSecondTip": "Only one annotator holds these so far. The next person to click “Assign me work” gets them first.",
+          "agreed": "Agreed",
+          "agreedTip": "Both annotators gave the same answer, so it went to BDRC as final.",
+          "adjudicationWaiting": "Waiting for adjudication",
+          "adjudicationWaitingTip": "The annotators disagreed (or one could not answer). No adjudicator has opened these yet.",
+          "beingAdjudicated": "Being adjudicated",
+          "beingAdjudicatedTip": "An adjudicator has opened these and not answered yet.",
+          "adjudicated": "Adjudicated",
+          "adjudicatedTip": "Settled by an adjudicator and sent to BDRC."
+        },
+        "section": {
+          "batches": "Batches",
+          "batchesTip": "Batches of pairs prepared by BDRC. New batches appear here automatically.",
+          "finalAnswers": "Final answers",
+          "finalAnswersTip": "The answer BDRC has for each settled pair: the one both annotators agreed on, or the adjudicator's.",
+          "couldntAnswer": "Couldn't answer",
+          "couldntAnswerTip": "When annotators chose “Can't answer”, the reason they gave.",
+          "dataProblems": "Data problems reported",
+          "dataProblemsTip": "Problems with the texts themselves, reported for fixing later."
+        },
+        "noBatches": "No batches yet.",
+        "noAnswers": "No answers yet.",
+        "noneSoFar": "None so far.",
+        "doubleReview": "Double review",
+        "doubleReviewTip": "Every pair is answered by two annotators. If they give the same answer it is final; otherwise an adjudicator decides.",
+        "agreement": "Agreement",
+        "agreementTip": "Of the pairs both annotators have answered, how many they answered the same.",
+        "agreedOf": "{{n}} of {{total}} pairs answered by both",
+        "seeDisputed": "See disputed pairs",
+        "howSettled": "How disputes were settled",
+        "howSettledTip": "What the adjudicator decided, compared with the two annotators' answers.",
+        "noneSettled": "None settled yet."
+      },
+      "sync": {
+        "failed_one": "{{n}} answer did not reach BDRC",
+        "failed_other": "{{n}} answers did not reach BDRC",
+        "failedHelp": "The answers are saved here. Please send these pair numbers to a developer:"
+      },
+      "batch": {
+        "added": "Added {{date}}",
+        "statusInBdrc": "Status in BDRC",
+        "statusInBdrcTip": "Live from BDRC: every pair of the batch, whoever answered it.",
+        "bdrcStatus": {
+          "finalized": "Answered",
+          "flagged": "Problem, no answer yet",
+          "other": "Other",
+          "new": "Not answered yet"
+        },
+        "given": "Given to annotators: {{n}} of {{total}}",
+        "answered": "{{n}} answered",
+        "givenTip": "From the Cataloger: how many pairs of this batch annotators have taken so far, and how many of those they answered."
+      },
+      "mode": {
+        "single": {
+          "label": "Single review",
+          "help": "One annotator per pair. Their answer is final and goes straight to BDRC.",
+          "switched": "Single review is on for pairs handed out from now on"
+        },
+        "double": {
+          "label": "Double review",
+          "help": "Two annotators per pair. The same answer is final; otherwise an adjudicator decides.",
+          "switched": "Double review is on for pairs handed out from now on"
+        },
+        "failed": "Could not change it: {{error}}",
+        "title": "Review mode for new pairs",
+        "titleTip": "Applies to pairs handed out with “Assign me work” from now on. Pairs already handed out keep the mode they were given, so switching never changes work in progress.",
+        "singleWarning": "Single review is on. Switch back to double review once a second annotator is working.",
+        "lastChanged": "Last changed {{when}}",
+        "lastChangedBy": "Last changed {{when}} by {{who}}"
+      },
+      "nav": {
+        "label": "Deduplicator admin",
+        "overview": "Overview",
+        "annotators": "Annotators",
+        "adjudications": "Adjudications"
+      },
+      "adminsOnly": "Admins only.",
+      "singleOn": "Single review is on",
+      "singleOnHint": "New pairs get one annotator.",
+      "annotators": {
+        "subtitle": "Open a person to see their pairs or move unfinished ones.",
+        "legend": "Answer colours",
+        "loadFailed": "Could not load annotators: {{error}}",
+        "nobody": "Nobody can use the Deduplicator yet. Give the “dedup” permission in Admin → Users.",
+        "card": {
+          "opened": "{{n}} opened",
+          "notOpened": "{{n}} not opened",
+          "total": "{{time}} in total",
+          "perPair": "~{{time}} per pair",
+          "agreed": "Agreed {{value}}",
+          "adjudicated": "{{n}} adjudicated",
+          "active": "Active {{when}}"
+        },
+        "col": {
+          "annotator": "Annotator",
+          "answered": "Answered",
+          "answeredTip": "Pairs answered out of those given, and how many with each option (their own latest answer per pair; a changed answer counts once).",
+          "opened": "Opened",
+          "openedTip": "Opened but not answered yet.",
+          "notOpened": "Not opened",
+          "totalTime": "Total time",
+          "totalTimeTip": "Time spent working on pairs: counted only while a pair is on screen and in use. Leaving the tab or 5 minutes without any activity pauses it.",
+          "perPair": "Per pair",
+          "perPairTip": "Average working time per answered pair, including any return visits.",
+          "agreementTip": "Of the pairs this person and their partner both answered, how many they answered the same. Low agreement can mean the person needs help, or that the pairs were hard.",
+          "adjudicatedTip": "Disputed pairs this person settled as adjudicator.",
+          "lastActive": "Last active"
+        },
+        "open": "Open {{name}}",
+        "agreementValue": "{{n}} of {{total}} ({{pct}}%)",
+        "doneOf": "{{n}} of {{total}}",
+        "adjudicatorBadge": "Adjudicator",
+        "accessRemoved": "access removed"
+      },
+      "annotator": {
+        "moved_one": "{{n}} pair moved to {{name}}",
+        "moved_other": "{{n}} pairs moved to {{name}}",
+        "unassigned_one": "{{n}} pair unassigned",
+        "unassigned_other": "{{n}} pairs unassigned",
+        "skipped": "{{n}} skipped: already answered, no longer assigned here, or the other person already holds the pair's second place",
+        "updateFailed": "Could not update: {{error}}",
+        "thisAnnotator": "this annotator",
+        "answers": "Answers",
+        "answersTip": "Their own latest answer per pair, counted by option.",
+        "tickHint": "Tick unanswered pairs to move them.",
+        "answeredStay": "Answered pairs stay.",
+        "selectAll": "Select all unfinished items",
+        "pair": "Pair",
+        "answeredStaysTitle": "Answered: stays with this annotator",
+        "selectPair": "Select pair {{id}}",
+        "selected_one": "{{n}} pair selected",
+        "selected_other": "{{n}} pairs selected",
+        "reassignTo": "Reassign to",
+        "reassignToPlaceholder": "Reassign to…",
+        "targetOption": "{{name}} ({{n}} open)",
+        "reassign": "Reassign",
+        "unassign": "Unassign",
+        "unassignTip": "Takes these pairs away from this person without choosing someone else. The next annotator who clicks “Assign me work” gets them.",
+        "clear": "Clear",
+        "confirmMove_one": "Move {{n}} pair to {{name}}?",
+        "confirmMove_other": "Move {{n}} pairs to {{name}}?",
+        "confirmUnassign_one": "Unassign {{n}} pair?",
+        "confirmUnassign_other": "Unassign {{n}} pairs?",
+        "confirmMoveHelp": "They move from {{from}}'s list to {{to}}'s To do list. The pair's other annotator keeps their place.",
+        "confirmUnassignHelp": "They leave {{from}}'s list. The next annotator who clicks “Assign me work” gets them. The pair's other annotator keeps their place.",
+        "move": "Move"
+      },
+      "adjudications": {
+        "handed_one": "{{n}} pair handed to {{name}}",
+        "handed_other": "{{n}} pairs handed to {{name}}",
+        "requeued_one": "{{n}} pair put back in the queue",
+        "requeued_other": "{{n}} pairs put back in the queue",
+        "skipped": "{{n}} skipped: already settled, or that person annotated the pair",
+        "subtitle": "Pairs where the two annotators did not agree, or one of them could not answer. The adjudicator’s answer is final.",
+        "tab": {
+          "open": "Not settled",
+          "done": "Settled",
+          "all": "All"
+        },
+        "status": {
+          "waiting": "Waiting",
+          "progress": "Being adjudicated",
+          "settled": "Settled"
+        },
+        "tickHint": "Tick unsettled pairs to hand them over.",
+        "settledStay": "Settled pairs stay.",
+        "loadFailed": "Could not load disputed pairs: {{error}}",
+        "selectAll": "Select all unsettled pairs",
+        "finalAnswerTip": "The adjudicator's answer, and how it compares with the annotators'.",
+        "disputedSince": "Disputed since",
+        "noneWaiting": "No disputed pairs waiting.",
+        "handTo": "Hand to adjudicator",
+        "handToPlaceholder": "Hand to…",
+        "roleAdjudicator": "(adjudicator)",
+        "roleAdmin": "(admin)",
+        "handOver": "Hand over",
+        "putBack": "Put back in queue",
+        "putBackTip": "Frees these pairs: the next adjudicator to open one takes it."
+      }
+    }
   }
 }

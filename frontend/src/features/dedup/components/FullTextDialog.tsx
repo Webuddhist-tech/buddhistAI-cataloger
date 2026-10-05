@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronsUpDown, Columns2, Rows2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import i18n from '@/i18n/config';
 import type { DiffGranularity, WitnessCard } from '../api/review';
 import { buildDiffRows, dtypeOf, foldRows, typeCode, withoutNewlines, type DiffRow, type Piece } from '../diffRows';
 import { useFullText, useTextDiff } from '../hooks/useReview';
-import { displayText } from '../utils';
+import { displayText, formatNumber } from '../utils';
 import { SourceBadge, WitnessMeta } from './SourceBadge';
 
 // Opens over the review page so Esc returns the reviewer to where they were. Full-text
@@ -21,6 +23,7 @@ type Props = {
 };
 
 export default function FullTextDialog({ a, b, view, onViewChange, onClose }: Readonly<Props>) {
+  const { t } = useTranslation();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -39,14 +42,14 @@ export default function FullTextDialog({ a, b, view, onViewChange, onClose }: Re
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-gray-900/40 p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Full texts">
+    <div className="fixed inset-0 z-50 flex bg-gray-900/40 p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={t('dedup.fullText.dialogLabel')}>
       <div className="flex min-h-0 w-full flex-col overflow-hidden bg-white shadow-xl sm:rounded-xl">
         <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 px-3 py-2.5 sm:px-4 sm:py-3">
           <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
             {(
               [
-                ['side', 'Full texts'],
-                ['diff', 'Differences'],
+                ['side', t('dedup.evidence.fullTextsShort')],
+                ['diff', t('dedup.evidence.differencesShort')],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -63,10 +66,10 @@ export default function FullTextDialog({ a, b, view, onViewChange, onClose }: Re
             ))}
           </div>
           {view === 'side' && (
-            <span className="hidden text-xs text-gray-500 sm:inline">Each side scrolls on its own</span>
+            <span className="hidden text-xs text-gray-500 sm:inline">{t('dedup.fullText.scrollHint')}</span>
           )}
           <Button variant="outline" size="sm" className="ml-auto cursor-pointer" onClick={onClose}>
-            <X className="h-4 w-4" /> Close <kbd className="ml-1 hidden rounded border px-1 font-mono text-[10px] opacity-60 sm:inline">Esc</kbd>
+            <X className="h-4 w-4" /> {t('dedup.common.close')} <kbd className="ml-1 hidden rounded border px-1 font-mono text-[10px] opacity-60 sm:inline">Esc</kbd>
           </Button>
         </div>
 
@@ -82,21 +85,22 @@ export default function FullTextDialog({ a, b, view, onViewChange, onClose }: Re
 
 // Below lg each text would only get half the sheet, so one is shown at a time.
 function SideBySide({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
+  const { t } = useTranslation();
   const [pane, setPane] = useState<'A' | 'B'>('A');
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex border-b border-gray-200 lg:hidden" role="tablist">
-        {(['A', 'B'] as const).map((t) => (
+        {(['A', 'B'] as const).map((tag) => (
           <button
-            key={t}
+            key={tag}
             role="tab"
-            aria-selected={pane === t}
-            onClick={() => setPane(t)}
+            aria-selected={pane === tag}
+            onClick={() => setPane(tag)}
             className={`flex-1 cursor-pointer py-2 text-sm font-medium ${
-              pane === t ? 'border-b-2 border-gray-900 text-gray-900' : 'text-gray-500'
+              pane === tag ? 'border-b-2 border-gray-900 text-gray-900' : 'text-gray-500'
             }`}
           >
-            Text {t}
+            {t('dedup.fullText.textTab', { tag })}
           </button>
         ))}
       </div>
@@ -109,6 +113,7 @@ function SideBySide({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
 }
 
 function PaneHeader({ tag, card }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard }>) {
+  const { t } = useTranslation();
   return (
     <header className="border-b border-gray-200 bg-gray-50/60 px-4 py-3 sm:px-5">
       <div className="flex items-start gap-2.5">
@@ -117,7 +122,7 @@ function PaneHeader({ tag, card }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard 
         </span>
         <div className="min-w-0">
           <div className="break-words font-monlam text-lg leading-relaxed text-gray-900 sm:text-xl">
-            {card.title_bo || <span className="font-sans text-sm italic text-gray-400">no title</span>}
+            {card.title_bo || <span className="font-sans text-sm italic text-gray-400">{t('dedup.witness.noTitle')}</span>}
           </div>
           {card.author_name_bo && <div className="font-monlam text-base text-gray-700">{card.author_name_bo}</div>}
         </div>
@@ -130,15 +135,16 @@ function PaneHeader({ tag, card }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard 
 }
 
 function TextPane({ tag, card, className = 'flex' }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard; className?: string }>) {
+  const { t } = useTranslation();
   const text = useFullText(card.mw_id);
   return (
     <section className={`${className} min-h-0 flex-col`}>
       <PaneHeader tag={tag} card={card} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        {text.isLoading && <div className="py-12 text-center text-sm text-gray-500">Loading full text…</div>}
+        {text.isLoading && <div className="py-12 text-center text-sm text-gray-500">{t('dedup.witness.loadingFullText')}</div>}
         {text.error && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <strong>Full text not available.</strong> {text.error.message}
+            <strong>{t('dedup.witness.fullTextUnavailable')}</strong> {text.error.message}
           </div>
         )}
         {text.data && (
@@ -154,13 +160,10 @@ function TextPane({ tag, card, className = 'flex' }: Readonly<{ tag: 'A' | 'B'; 
 
 type DiffLayout = 'split' | 'unified';
 
-const GRANULARITIES: [DiffGranularity, string][] = [
-  ['syllable', 'Syllable'],
-  ['char', 'Character'],
-  ['line', 'Line'],
-];
+const GRANULARITIES: DiffGranularity[] = ['syllable', 'char', 'line'];
 
 function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
+  const { t } = useTranslation();
   const [granularity, setGranularity] = useState<DiffGranularity>('syllable');
   // Two columns are too narrow on a phone.
   const [layout, setLayout] = useState<DiffLayout>(() =>
@@ -193,11 +196,11 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm sm:px-4">
-        <div className="inline-flex rounded-md border border-gray-300 bg-white p-0.5" role="radiogroup" aria-label="Layout">
+        <div className="inline-flex rounded-md border border-gray-300 bg-white p-0.5" role="radiogroup" aria-label={t('dedup.diff.layout')}>
           {(
             [
-              ['split', 'Split', Columns2],
-              ['unified', 'Unified', Rows2],
+              ['split', t('dedup.diff.split'), Columns2],
+              ['unified', t('dedup.diff.unified'), Rows2],
             ] as const
           ).map(([key, label, Icon]) => (
             <button
@@ -205,7 +208,7 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
               role="radio"
               aria-checked={layout === key}
               onClick={() => setLayout(key)}
-              title={key === 'split' ? 'A and B next to each other' : 'A and B in one column'}
+              title={t(key === 'split' ? 'dedup.diff.splitTitle' : 'dedup.diff.unifiedTitle')}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors ${
                 layout === key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'
               }`}
@@ -216,8 +219,10 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
         </div>
         {diff.data && (
           <span className="text-gray-600">
-            <strong className="tabular-nums text-gray-900">{Math.round(diff.data.ratio * 100)}%</strong> the same ·{' '}
-            <span className="tabular-nums">{changes.toLocaleString()}</span> {changes === 1 ? 'change' : 'changes'}
+            <strong className="tabular-nums text-gray-900">
+              {t('dedup.diff.percentSame', { pct: formatNumber(Math.round(diff.data.ratio * 100)) })}
+            </strong>{' '}
+            · {t('dedup.diff.changes', { count: changes, n: formatNumber(changes) })}
           </span>
         )}
         {punctuationCount > 0 && (
@@ -228,19 +233,19 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
               checked={showPunctuation}
               onChange={(e) => setShowPunctuation(e.target.checked)}
             />
-            Show punctuation differences
+            {t('dedup.diff.showPunctuation')}
           </label>
         )}
         <label className="ml-auto inline-flex items-center gap-2 text-gray-600">
-          Compare by
+          {t('dedup.diff.compareBy')}
           <select
             value={granularity}
             onChange={(e) => setGranularity(e.target.value as DiffGranularity)}
             className="cursor-pointer rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
           >
-            {GRANULARITIES.map(([value, label]) => (
+            {GRANULARITIES.map((value) => (
               <option key={value} value={value}>
-                {label}
+                {t(`dedup.diff.granularity.${value}`)}
               </option>
             ))}
           </select>
@@ -261,10 +266,10 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
       )}
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {diff.isLoading && <div className="py-12 text-center text-sm text-gray-500">Comparing the two texts…</div>}
+        {diff.isLoading && <div className="py-12 text-center text-sm text-gray-500">{t('dedup.diff.comparing')}</div>}
         {diff.error && (
           <div className="m-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <strong>Could not compare the texts.</strong> {diff.error.message}
+            <strong>{t('dedup.diff.failed')}</strong> {diff.error.message}
           </div>
         )}
         {diff.data &&
@@ -339,7 +344,7 @@ function Side({ pieces, n, tone, changed, copy, className = '' }: Readonly<{
   className?: string;
 }>) {
   const tint = tone === 'red' ? 'bg-red-50' : 'bg-green-50';
-  if (n == null) return <div className={`bg-gray-50 ${className}`} aria-label={`Not in ${copy}`} />;
+  if (n == null) return <div className={`bg-gray-50 ${className}`} aria-label={i18n.t('dedup.diff.notIn', { copy })} />;
   return (
     <div className={`flex min-w-0 ${changed ? tint : ''} ${className}`}>
       <span className={LINE_NO}>{n}</span>
@@ -396,6 +401,7 @@ function Row({ row, num, layout }: Readonly<{ row: DiffRow; num: RowNum; layout:
 }
 
 function Fold({ rows, start, nums, layout }: Readonly<{ rows: DiffRow[]; start: number; nums: RowNum[]; layout: DiffLayout }>) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   if (open) return <>{rows.map((row, k) => <Row key={start + k} row={row} num={nums[start + k]} layout={layout} />)}</>;
   return (
@@ -404,7 +410,7 @@ function Fold({ rows, start, nums, layout }: Readonly<{ rows: DiffRow[]; start: 
       className="flex w-full cursor-pointer items-center justify-center gap-2 border-b border-gray-200 bg-gray-50 py-1.5 text-xs text-gray-600 hover:bg-gray-100"
     >
       <ChevronsUpDown className="h-3.5 w-3.5" />
-      {rows.length.toLocaleString()} unchanged lines · Show
+      {t('dedup.diff.unchangedLines', { count: rows.length, n: formatNumber(rows.length) })} · {t('dedup.diff.show')}
     </button>
   );
 }

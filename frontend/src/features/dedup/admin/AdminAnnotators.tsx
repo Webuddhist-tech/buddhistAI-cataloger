@@ -2,10 +2,13 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import type { Annotator } from '../api/review';
 import { useAnnotators } from '../hooks/useReview';
-import { ANSWER_GROUPS, answerGroups, formatDateTime, formatDuration } from '../utils';
+import i18n from '@/i18n/config';
+import { useTranslation } from 'react-i18next';
+import { answerGroups, formatDateTime, formatDuration, formatNumber } from '../utils';
 import InfoTip from './InfoTip';
 
 export default function AdminAnnotators() {
+  const { t } = useTranslation();
   const annotators = useAnnotators();
   const navigate = useNavigate();
   const open = (a: Annotator) => navigate(`/dedup-admin/annotators/${encodeURIComponent(a.user_id)}`);
@@ -14,31 +17,31 @@ export default function AdminAnnotators() {
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Annotators</h1>
-          <p className="mt-1 text-sm text-gray-600">Open a person to see their pairs or move unfinished ones.</p>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.admin.nav.annotators')}</h1>
+          <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.annotators.subtitle')}</p>
         </div>
         {/* What the colours in "Answered" mean: always in sight, since hover does not work on phones. */}
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600" aria-label="Answer colours">
-          {ANSWER_GROUPS.map((g) => (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600" aria-label={t('dedup.admin.annotators.legend')}>
+          {answerGroups({}).map((g) => (
             <li key={g.label} className="inline-flex items-center gap-1.5">
               <span className={`h-2.5 w-2.5 rounded-full ${g.bar}`} /> {g.label}
             </li>
           ))}
           <li className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-gray-200" /> Not answered yet
+            <span className="h-2.5 w-2.5 rounded-full bg-gray-200" /> {t('dedup.admin.batch.bdrcStatus.new')}
           </li>
         </ul>
       </div>
 
       {annotators.error && (
         <div className="mt-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load annotators: {annotators.error.message}
+          {t('dedup.admin.annotators.loadFailed', { error: annotators.error.message })}
         </div>
       )}
       {annotators.isLoading && <div className="mt-6 h-40 animate-pulse rounded-xl bg-gray-100" />}
       {annotators.data?.length === 0 && (
         <p className="mt-6 rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">
-          Nobody can use the Deduplicator yet. Give the “dedup” permission in Admin → Users.
+          {t('dedup.admin.annotators.nobody')}
         </p>
       )}
 
@@ -55,13 +58,15 @@ export default function AdminAnnotators() {
                 <Progress a={a} />
               </div>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-                <span>{a.in_progress} opened</span>
-                <span>{a.not_started} not opened</span>
-                <span>{formatDuration(a.total_active_seconds)} in total</span>
-                <span>~{formatDuration(a.avg_active_seconds)} per pair</span>
-                <span>Agreed {agreement(a)}</span>
-                {a.adjudicated > 0 && <span>{a.adjudicated} adjudicated</span>}
-                <span>Active {formatDateTime(a.last_active)}</span>
+                <span>{t('dedup.admin.annotators.card.opened', { n: formatNumber(a.in_progress) })}</span>
+                <span>{t('dedup.admin.annotators.card.notOpened', { n: formatNumber(a.not_started) })}</span>
+                <span>{t('dedup.admin.annotators.card.total', { time: formatDuration(a.total_active_seconds) })}</span>
+                <span>{t('dedup.admin.annotators.card.perPair', { time: formatDuration(a.avg_active_seconds) })}</span>
+                <span>{t('dedup.admin.annotators.card.agreed', { value: agreement(a) })}</span>
+                {a.adjudicated > 0 && (
+                  <span>{t('dedup.admin.annotators.card.adjudicated', { n: formatNumber(a.adjudicated) })}</span>
+                )}
+                <span>{t('dedup.admin.annotators.card.active', { when: formatDateTime(a.last_active) })}</span>
               </div>
             </button>
           </li>
@@ -74,46 +79,46 @@ export default function AdminAnnotators() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
-                <th className="rounded-tl-lg px-4 py-3 font-medium">Annotator</th>
+                <th className="rounded-tl-lg px-4 py-3 font-medium">{t('dedup.admin.annotators.col.annotator')}</th>
                 <th className="px-3 py-3 font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Answered
-                    <InfoTip text="Pairs answered out of those given, and how many with each option (their own latest answer per pair; a changed answer counts once)." />
+                    {t('dedup.admin.annotators.col.answered')}
+                    <InfoTip text={t('dedup.admin.annotators.col.answeredTip')} />
                   </span>
                 </th>
 
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Opened <InfoTip text="Opened but not answered yet." />
+                    {t('dedup.admin.annotators.col.opened')} <InfoTip text={t('dedup.admin.annotators.col.openedTip')} />
                   </span>
                 </th>
-                <th className="px-3 py-3 text-right font-medium">Not opened</th>
+                <th className="px-3 py-3 text-right font-medium">{t('dedup.admin.annotators.col.notOpened')}</th>
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Total time
+                    {t('dedup.admin.annotators.col.totalTime')}
                     <InfoTip
-                      text="Time spent working on pairs: counted only while a pair is on screen and in use. Leaving the tab or 5 minutes without any activity pauses it."
+                      text={t('dedup.admin.annotators.col.totalTimeTip')}
                     />
                   </span>
                 </th>
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Per pair
-                    <InfoTip text="Average working time per answered pair, including any return visits." />
+                    {t('dedup.admin.annotators.col.perPair')}
+                    <InfoTip text={t('dedup.admin.annotators.col.perPairTip')} />
                   </span>
                 </th>
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Agreement
-                    <InfoTip text="Of the pairs this person and their partner both answered, how many they answered the same. Low agreement can mean the person needs help, or that the pairs were hard." />
+                    {t('dedup.admin.overview.agreement')}
+                    <InfoTip text={t('dedup.admin.annotators.col.agreementTip')} />
                   </span>
                 </th>
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
-                    Adjudicated <InfoTip text="Disputed pairs this person settled as adjudicator." />
+                    {t('dedup.admin.overview.stat.adjudicated')} <InfoTip text={t('dedup.admin.annotators.col.adjudicatedTip')} />
                   </span>
                 </th>
-                <th className="px-3 py-3 font-medium">Last active</th>
+                <th className="px-3 py-3 font-medium">{t('dedup.admin.annotators.col.lastActive')}</th>
                 <th className="w-8 rounded-tr-lg px-3 py-3" />
               </tr>
             </thead>
@@ -133,12 +138,12 @@ export default function AdminAnnotators() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatDuration(a.avg_active_seconds)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{agreement(a)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.adjudicated || '—'}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.adjudicated ? formatNumber(a.adjudicated) : '—'}</td>
                   <td className="px-3 py-3 text-xs text-gray-500">
                     <LastActive iso={a.last_active} />
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <ArrowRight className="ml-auto h-4 w-4 text-blue-700" aria-label={`Open ${a.name || a.email}`} />
+                    <ArrowRight className="ml-auto h-4 w-4 text-blue-700" aria-label={t('dedup.admin.annotators.open', { name: a.name || a.email })} />
                   </td>
                 </tr>
               ))}
@@ -166,19 +171,24 @@ function LastActive({ iso }: Readonly<{ iso: string | null }>) {
 /** "8 of 10 (80%)", or "—" before any pair has both answers. */
 function agreement(a: Annotator): string {
   if (!a.paired) return '—';
-  return `${a.agreed} of ${a.paired} (${Math.round((a.agreed / a.paired) * 100)}%)`;
+  return i18n.t('dedup.admin.annotators.agreementValue', {
+    n: formatNumber(a.agreed),
+    total: formatNumber(a.paired),
+    pct: formatNumber(Math.round((a.agreed / a.paired) * 100)),
+  });
 }
 
 // Answered out of given, as one bar split by answer (same, different, …); the light
 // rest is not answered yet. One line below names the counts in the same colours.
 function Progress({ a }: Readonly<{ a: Annotator }>) {
+  const { t } = useTranslation();
   const groups = answerGroups(a.answers).filter((g) => g.n > 0);
   const total = Math.max(a.assigned, groups.reduce((s, g) => s + g.n, 0));
-  const hover = groups.map((g) => `${g.label}: ${g.n}${g.detail ? ` (${g.detail})` : ''}`).join('\n');
+  const hover = groups.map((g) => `${g.label}: ${formatNumber(g.n)}${g.detail ? ` (${g.detail})` : ''}`).join('\n');
   return (
     <div title={hover || undefined}>
       <div className="text-sm text-gray-700">
-        <strong className="tabular-nums text-gray-900">{a.done}</strong> of <span className="tabular-nums">{a.assigned}</span>
+        {t('dedup.admin.annotators.doneOf', { n: formatNumber(a.done), total: formatNumber(a.assigned) })}
       </div>
       <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
         {groups.map((g) => (
@@ -191,7 +201,7 @@ function Progress({ a }: Readonly<{ a: Annotator }>) {
           {groups.map((g) => (
             <span key={g.label} className={`inline-flex items-center gap-1 ${g.text}`}>
               <span className={`h-2 w-2 rounded-full ${g.bar}`} aria-hidden="true" />
-              <span className="tabular-nums font-medium">{g.n}</span>
+              <span className="tabular-nums font-medium">{formatNumber(g.n)}</span>
               <span className="sr-only">{g.label}</span>
             </span>
           ))}
@@ -202,6 +212,7 @@ function Progress({ a }: Readonly<{ a: Annotator }>) {
 }
 
 export function Person({ a }: Readonly<{ a: Pick<Annotator, 'name' | 'email' | 'picture' | 'has_access'> & { role?: string | null } }>) {
+  const { t } = useTranslation();
   const initial = (a.name || a.email || '?').charAt(0).toUpperCase();
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -217,10 +228,10 @@ export function Person({ a }: Readonly<{ a: Pick<Annotator, 'name' | 'email' | '
         <div className="flex items-center gap-2 truncate text-xs text-gray-500">
           {a.name && <span className="truncate">{a.email}</span>}
           {a.role === 'reviewer' && (
-            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">Adjudicator</span>
+            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">{t('dedup.admin.annotators.adjudicatorBadge')}</span>
           )}
           {!a.has_access && (
-            <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700">access removed</span>
+            <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700">{t('dedup.admin.annotators.accessRemoved')}</span>
           )}
         </div>
       </div>

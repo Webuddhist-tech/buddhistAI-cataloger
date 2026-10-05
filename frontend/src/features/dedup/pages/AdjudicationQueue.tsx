@@ -1,18 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, ListChecks } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n/config';
 import { useUser } from '@/hooks/useUser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AdjudicationItem, AnnotatorAnswer, MyItemsState } from '../api/review';
 import { useAdjudicationQueue, useBatchName } from '../hooks/useReview';
-import { formatDateTime, verdictLabel } from '../utils';
+import { answerLabel, formatDateTime, formatNumber, verdictLabel } from '../utils';
 
-const STATE_TABS: { key: MyItemsState; label: string }[] = [
-  { key: 'open', label: 'To do' },
-  { key: 'done', label: 'Done' },
-  { key: 'all', label: 'All' },
-];
+const STATE_TABS: MyItemsState[] = ['open', 'done', 'all'];
 
 const VERDICT_STYLE: Record<string, string> = {
   same: 'bg-green-50 text-green-700',
@@ -24,7 +22,7 @@ function rowStatus(it: AdjudicationItem): RowStatus {
   if (it.adjudication.completed_at) return 'done';
   return it.adjudication.first_opened_at ? 'progress' : 'new';
 }
-const STATUS_LABEL: Record<RowStatus, string> = { done: 'Settled', progress: 'In progress', new: 'Waiting' };
+// Labels: dedup.adjudicationQueue.status.<RowStatus>.
 const STATUS_STYLE: Record<RowStatus, string> = {
   done: 'bg-green-50 text-green-700',
   progress: 'bg-amber-50 text-amber-800',
@@ -33,15 +31,15 @@ const STATUS_STYLE: Record<RowStatus, string> = {
 
 /** How long a pair has been waiting, e.g. "3 h" or "2 d". */
 function waited(iso: string): string {
-  const t = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`).getTime();
-  const h = Math.max(0, Math.floor((Date.now() - t) / 3_600_000));
-  if (h < 1) return '< 1 h';
-  if (h < 48) return `${h} h`;
-  return `${Math.floor(h / 24)} d`;
+  const since = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`).getTime();
+  const h = Math.max(0, Math.floor((Date.now() - since) / 3_600_000));
+  if (h < 1) return i18n.t('dedup.adjudicationQueue.waitedUnderHour');
+  if (h < 48) return i18n.t('dedup.adjudicationQueue.waitedHours', { n: formatNumber(h) });
+  return i18n.t('dedup.adjudicationQueue.waitedDays', { n: formatNumber(Math.floor(h / 24)) });
 }
 
 function VerdictChip({ answer }: Readonly<{ answer: AnnotatorAnswer }>) {
-  const label = answer.verdict === 'not_sure' ? "Can't answer" : answer.verdict ? verdictLabel(answer.verdict) : '—';
+  const label = answerLabel(answer.verdict);
   return (
     <span
       className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -54,11 +52,12 @@ function VerdictChip({ answer }: Readonly<{ answer: AnnotatorAnswer }>) {
 }
 
 function Dispute({ item }: Readonly<{ item: AdjudicationItem }>) {
+  const { t } = useTranslation();
   const [first, second] = item.annotations;
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       {first && <VerdictChip answer={first} />}
-      <span className="text-xs text-gray-400">vs</span>
+      <span className="text-xs text-gray-400">{t('dedup.adjudicationQueue.vs')}</span>
       {second && <VerdictChip answer={second} />}
     </span>
   );
@@ -66,6 +65,7 @@ function Dispute({ item }: Readonly<{ item: AdjudicationItem }>) {
 
 // Disputed pairs for adjudicators (reviewers, and admins on pairs they did not annotate).
 export default function AdjudicationQueue() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const batchName = useBatchName();
   const { user } = useUser();
@@ -90,23 +90,23 @@ export default function AdjudicationQueue() {
   }, [loaded, q]);
   const openItem = (itemId: number) => navigate(`/dedup/adjudicate/${itemId}`);
 
-  let emptyText = 'No pairs here.';
-  if (q) emptyText = `No titles match “${q}”.`;
-  else if (state === 'open') emptyText = 'Nothing to adjudicate right now. Pairs appear here when two annotators disagree.';
+  let emptyText = t('dedup.adjudicationQueue.empty');
+  if (q) emptyText = t('dedup.common.noTitleMatch', { q });
+  else if (state === 'open') emptyText = t('dedup.adjudicationQueue.emptyToDo');
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">To adjudicate</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.adjudicationQueue.title')}</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Pairs where the two annotators did not agree. Read the texts and give the final answer.
+            {t('dedup.adjudicationQueue.subtitle')}
           </p>
         </div>
         {user?.role === 'admin' && (
           <Button asChild variant="outline" className="cursor-pointer">
             <Link to="/dedup">
-              <ListChecks className="h-4 w-4" /> My items
+              <ListChecks className="h-4 w-4" /> {t('dedup.review.myItems')}
             </Link>
           </Button>
         )}
@@ -114,17 +114,17 @@ export default function AdjudicationQueue() {
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
-          {STATE_TABS.map((t) => (
+          {STATE_TABS.map((key) => (
             <button
-              key={t.key}
+              key={key}
               role="tab"
-              aria-selected={state === t.key}
-              onClick={() => setState(t.key)}
+              aria-selected={state === key}
+              onClick={() => setState(key)}
               className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-colors ${
-                state === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                state === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {t.label}
+              {t(`dedup.queue.tab.${key}`)}
             </button>
           ))}
         </div>
@@ -132,14 +132,14 @@ export default function AdjudicationQueue() {
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search titles…"
+          placeholder={t('dedup.common.searchTitles')}
           className="w-full sm:w-72"
         />
       </div>
 
       {items.error && (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load pairs: {items.error.message}
+          {t('dedup.adjudicationQueue.loadFailed', { error: items.error.message })}
         </div>
       )}
 
@@ -155,11 +155,11 @@ export default function AdjudicationQueue() {
                 className="w-full cursor-pointer rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm active:bg-gray-50"
               >
                 <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
-                  <span className="tabular-nums" title={`Item ${it.item_id}`}>
-                    No. {numberOf.get(it.item_id) ?? '—'} · {batchName(it.batch_id)}
+                  <span className="tabular-nums" title={t('dedup.common.itemId', { id: it.item_id })}>
+                    {t('dedup.common.number')} {numberOf.get(it.item_id) ?? '—'} · {batchName(it.batch_id)}
                   </span>
                   <span className={`rounded-full px-2.5 py-0.5 font-medium ${STATUS_STYLE[status]}`}>
-                    {STATUS_LABEL[status]}
+                    {t(`dedup.adjudicationQueue.status.${status}`)}
                   </span>
                 </div>
                 <div className="mt-2 break-words font-monlam text-base leading-relaxed text-gray-900">
@@ -170,7 +170,7 @@ export default function AdjudicationQueue() {
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <Dispute item={it} />
-                  <span className="text-xs text-gray-500">waiting {waited(it.adjudication.created_at)}</span>
+                  <span className="text-xs text-gray-500">{t('dedup.adjudicationQueue.waiting', { time: waited(it.adjudication.created_at) })}</span>
                 </div>
               </button>
             </li>
@@ -185,12 +185,12 @@ export default function AdjudicationQueue() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
-              <th className="w-16 px-4 py-3 font-medium">No.</th>
-              <th className="px-4 py-3 font-medium">Texts</th>
-              <th className="px-4 py-3 font-medium">Annotators said</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="hidden px-4 py-3 font-medium md:table-cell">Final answer</th>
-              <th className="hidden px-4 py-3 font-medium lg:table-cell">Waiting since</th>
+              <th className="w-16 px-4 py-3 font-medium">{t('dedup.common.number')}</th>
+              <th className="px-4 py-3 font-medium">{t('dedup.common.texts')}</th>
+              <th className="px-4 py-3 font-medium">{t('dedup.adjudicationQueue.annotatorsSaid')}</th>
+              <th className="px-4 py-3 font-medium">{t('dedup.common.status')}</th>
+              <th className="hidden px-4 py-3 font-medium md:table-cell">{t('dedup.review.finalAnswer')}</th>
+              <th className="hidden px-4 py-3 font-medium lg:table-cell">{t('dedup.adjudicationQueue.waitingSince')}</th>
               <th className="w-32 px-4 py-3" />
             </tr>
           </thead>
@@ -208,7 +208,7 @@ export default function AdjudicationQueue() {
               const done = status === 'done';
               return (
                 <tr key={it.item_id} onClick={() => openItem(it.item_id)} className="cursor-pointer transition-colors hover:bg-gray-50">
-                  <td className="px-4 py-4 tabular-nums text-gray-500" title={`Item ${it.item_id}`}>
+                  <td className="px-4 py-4 tabular-nums text-gray-500" title={t('dedup.common.itemId', { id: it.item_id })}>
                     {numberOf.get(it.item_id) ?? '—'}
                   </td>
                   <td className="px-4 py-4">
@@ -220,7 +220,7 @@ export default function AdjudicationQueue() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-4">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
-                      {STATUS_LABEL[status]}
+                      {t(`dedup.adjudicationQueue.status.${status}`)}
                     </span>
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-4 md:table-cell">
@@ -230,7 +230,7 @@ export default function AdjudicationQueue() {
                           VERDICT_STYLE[it.verdict] ?? 'bg-gray-100 text-gray-700'
                         }`}
                       >
-                        {it.verdict === 'not_sure' ? 'Unresolved' : verdictLabel(it.verdict)}
+                        {it.verdict === 'not_sure' ? t('dedup.adjudicationQueue.unresolved') : verdictLabel(it.verdict)}
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -258,11 +258,11 @@ export default function AdjudicationQueue() {
                     >
                       {done ? (
                         <>
-                          <Eye className="h-3.5 w-3.5" /> View
+                          <Eye className="h-3.5 w-3.5" /> {t('dedup.common.view')}
                         </>
                       ) : (
                         <>
-                          Adjudicate <ArrowRight className="h-3.5 w-3.5" />
+                          {t('dedup.adjudicationQueue.adjudicate')} <ArrowRight className="h-3.5 w-3.5" />
                         </>
                       )}
                     </Button>
@@ -278,11 +278,11 @@ export default function AdjudicationQueue() {
       <div className="mt-3 text-sm text-gray-600">
         {q ? (
           <>
-            {rows.length} {rows.length === 1 ? 'match' : 'matches'} in {loaded.length} pairs
+            {t('dedup.common.matchesIn', { count: rows.length, n: formatNumber(rows.length), total: formatNumber(loaded.length) })}
           </>
         ) : (
           <>
-            <strong className="text-gray-900">{loaded.length}</strong> {loaded.length === 1 ? 'pair' : 'pairs'}
+            {t('dedup.adjudicationQueue.pairCount', { count: loaded.length, n: formatNumber(loaded.length) })}
           </>
         )}
       </div>

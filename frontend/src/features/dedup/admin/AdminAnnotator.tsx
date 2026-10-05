@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Lock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,16 +14,12 @@ import {
 } from '@/components/ui/dialog';
 import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdminOverview, useAnnotatorItems, useAnnotators, useReassign } from '../hooks/useReview';
-import { answerLabel, batchNames, hasIssue, isDecided } from '../utils';
+import { answerLabel, batchNames, formatNumber, hasIssue, isDecided } from '../utils';
 import { Person } from './AdminAnnotators';
 import AnswerCounts from './AnswerCounts';
 import InfoTip from './InfoTip';
 
-const TABS: { key: MyItemsState; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'open', label: 'To do' },
-  { key: 'done', label: 'Done' },
-];
+const TABS: MyItemsState[] = ['all', 'open', 'done'];
 
 // Only unfinished items can be moved: an answered item belongs to whoever answered it.
 const isFinished = (it: ReviewItem) => Boolean(it.assignment?.completed_at);
@@ -30,6 +27,7 @@ const isFinished = (it: ReviewItem) => Boolean(it.assignment?.completed_at);
 type Pending = { kind: 'reassign'; to: string } | { kind: 'release' };
 
 export default function AdminAnnotator() {
+  const { t } = useTranslation();
   const { userId = '' } = useParams();
   const [state, setState] = useState<MyItemsState>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -76,27 +74,30 @@ export default function AdminAnnotator() {
         // Each pair has two annotators: only this person's place moves.
         fromUserId: userId,
       });
-      const verb = pending.kind === 'reassign' ? `moved to ${targetPerson?.name || targetPerson?.email}` : 'unassigned';
-      toast.success(`${res.moved.length} ${res.moved.length === 1 ? 'pair' : 'pairs'} ${verb}`);
+      const count = res.moved.length;
+      toast.success(
+        pending.kind === 'reassign'
+          ? t('dedup.admin.annotator.moved', { count, n: formatNumber(count), name: targetPerson?.name || targetPerson?.email })
+          : t('dedup.admin.annotator.unassigned', { count, n: formatNumber(count) }),
+      );
       if (res.skipped.length) {
-        toast.info(
-          `${res.skipped.length} skipped: already answered, no longer assigned here, or the other person already holds the pair's second place`,
-        );
+        toast.info(t('dedup.admin.annotator.skipped', { n: formatNumber(res.skipped.length) }));
       }
       setSelected(new Set());
       setPending(null);
     } catch (e) {
-      toast.error(`Could not update: ${(e as Error).message}`);
+      toast.error(t('dedup.admin.annotator.updateFailed', { error: (e as Error).message }));
     }
   };
 
   const n = selected.size;
-  const itemsWord = n === 1 ? 'pair' : 'pairs';
+  const who = person?.name || person?.email || t('dedup.admin.annotator.thisAnnotator');
+  const targetName = targetPerson?.name || targetPerson?.email;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8" style={{ paddingBottom: n ? 112 : undefined }}>
       <Link to="/dedup-admin/annotators" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
-        <ArrowLeft className="h-4 w-4" /> Annotators
+        <ArrowLeft className="h-4 w-4" /> {t('dedup.admin.nav.annotators')}
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
@@ -104,13 +105,13 @@ export default function AdminAnnotator() {
         {person && (
           <div className="flex flex-wrap gap-2 text-sm">
             <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">
-              <strong className="tabular-nums">{person.done}</strong> answered
+              {t('dedup.admin.batch.answered', { n: formatNumber(person.done) })}
             </span>
             <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">
-              <strong className="tabular-nums">{person.in_progress}</strong> opened
+              {t('dedup.admin.annotators.card.opened', { n: formatNumber(person.in_progress) })}
             </span>
             <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
-              <strong className="tabular-nums">{person.not_started}</strong> not opened
+              {t('dedup.admin.annotators.card.notOpened', { n: formatNumber(person.not_started) })}
             </span>
           </div>
         )}
@@ -118,7 +119,7 @@ export default function AdminAnnotator() {
       {person && person.done > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600">
           <span className="inline-flex items-center gap-1">
-            Answers <InfoTip text="Their own latest answer per pair, counted by option." />
+            {t('dedup.admin.annotator.answers')} <InfoTip text={t('dedup.admin.annotator.answersTip')} />
           </span>
           <AnswerCounts a={person} all />
         </div>
@@ -126,28 +127,28 @@ export default function AdminAnnotator() {
 
       <div className="mt-5 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
-          {TABS.map((t) => (
+          {TABS.map((key) => (
             <button
-              key={t.key}
+              key={key}
               role="tab"
-              aria-selected={state === t.key}
-              onClick={() => setState(t.key)}
+              aria-selected={state === key}
+              onClick={() => setState(key)}
               className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-colors ${
-                state === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                state === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {t.label}
+              {t(`dedup.queue.tab.${key}`)}
             </button>
           ))}
         </div>
         <p className="inline-flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-          Tick unanswered pairs to move them. <Lock className="h-3.5 w-3.5" /> Answered pairs stay.
+          {t('dedup.admin.annotator.tickHint')} <Lock className="h-3.5 w-3.5" /> {t('dedup.admin.annotator.answeredStay')}
         </p>
       </div>
 
       {items.error && (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          Could not load items: {items.error.message}
+          {t('dedup.queue.loadFailed', { error: items.error.message })}
         </div>
       )}
 
@@ -187,7 +188,7 @@ export default function AdminAnnotator() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
                     <span className="tabular-nums">
-                      Pair {it.item_id} · {names[it.batch_id] ?? it.batch_id}
+                      {t('dedup.pairView.title', { id: it.item_id })} · {names[it.batch_id] ?? it.batch_id}
                     </span>
                     <ItemStatus item={it} />
                   </div>
@@ -203,7 +204,7 @@ export default function AdminAnnotator() {
           );
         })}
         {!items.isLoading && rows.length === 0 && (
-          <li className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">No pairs here.</li>
+          <li className="rounded-lg border border-gray-200 bg-white py-10 text-center text-sm text-gray-500">{t('dedup.adjudicationQueue.empty')}</li>
         )}
       </ul>
 
@@ -215,7 +216,7 @@ export default function AdminAnnotator() {
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
-                  aria-label="Select all unfinished items"
+                  aria-label={t('dedup.admin.annotator.selectAll')}
                   className="cursor-pointer"
                   disabled={movable.length === 0}
                   checked={allMovableSelected}
@@ -224,10 +225,10 @@ export default function AdminAnnotator() {
                   }
                 />
               </th>
-              <th className="px-3 py-3 font-medium">Pair</th>
-              <th className="px-3 py-3 font-medium">Texts</th>
-              <th className="hidden px-3 py-3 font-medium md:table-cell">Batch</th>
-              <th className="px-3 py-3 font-medium">Status</th>
+              <th className="px-3 py-3 font-medium">{t('dedup.admin.annotator.pair')}</th>
+              <th className="px-3 py-3 font-medium">{t('dedup.common.texts')}</th>
+              <th className="hidden px-3 py-3 font-medium md:table-cell">{t('dedup.common.batch')}</th>
+              <th className="px-3 py-3 font-medium">{t('dedup.common.status')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -253,13 +254,13 @@ export default function AdminAnnotator() {
                 >
                   <td className="px-4 py-3">
                     {finished ? (
-                      <span title="Answered: stays with this annotator" className="inline-flex text-gray-400">
+                      <span title={t('dedup.admin.annotator.answeredStaysTitle')} className="inline-flex text-gray-400">
                         <Lock className="h-4 w-4" />
                       </span>
                     ) : (
                       <input
                         type="checkbox"
-                        aria-label={`Select pair ${it.item_id}`}
+                        aria-label={t('dedup.admin.annotator.selectPair', { id: it.item_id })}
                         className="cursor-pointer"
                         checked={selected.has(it.item_id)}
                         onClick={(e) => e.stopPropagation()}
@@ -288,7 +289,7 @@ export default function AdminAnnotator() {
           </tbody>
         </table>
         {!items.isLoading && rows.length === 0 && (
-          <p className="py-10 text-center text-sm text-gray-500">No pairs here.</p>
+          <p className="py-10 text-center text-sm text-gray-500">{t('dedup.adjudicationQueue.empty')}</p>
         )}
       </div>
 
@@ -296,19 +297,19 @@ export default function AdminAnnotator() {
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
             <span className="text-sm font-medium text-gray-900">
-              {n} {itemsWord} selected
+              {t('dedup.admin.annotator.selected', { count: n, n: formatNumber(n) })}
             </span>
             <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
               <select
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 className="w-full min-w-0 cursor-pointer rounded-md border border-gray-300 bg-white px-2 py-2 text-sm sm:w-auto sm:max-w-xs"
-                aria-label="Reassign to"
+                aria-label={t('dedup.admin.annotator.reassignTo')}
               >
-                <option value="">Reassign to…</option>
+                <option value="">{t('dedup.admin.annotator.reassignToPlaceholder')}</option>
                 {targets.map((a) => (
                   <option key={a.user_id} value={a.user_id}>
-                    {a.name || a.email} ({a.assigned - a.done} open)
+                    {t('dedup.admin.annotator.targetOption', { name: a.name || a.email, n: formatNumber(a.assigned - a.done) })}
                   </option>
                 ))}
               </select>
@@ -317,18 +318,18 @@ export default function AdminAnnotator() {
                 disabled={!target}
                 onClick={() => setPending({ kind: 'reassign', to: target })}
               >
-                Reassign
+                {t('dedup.admin.annotator.reassign')}
               </Button>
               <span className="inline-flex items-center gap-1">
                 <Button variant="outline" className="cursor-pointer" onClick={() => setPending({ kind: 'release' })}>
-                  Unassign
+                  {t('dedup.admin.annotator.unassign')}
                 </Button>
                 <InfoTip
-                  text="Takes these pairs away from this person without choosing someone else. The next annotator who clicks “Assign me work” gets them."
+                  text={t('dedup.admin.annotator.unassignTip')}
                 />
               </span>
               <Button variant="ghost" className="cursor-pointer" onClick={() => setSelected(new Set())}>
-                Clear
+                {t('dedup.admin.annotator.clear')}
               </Button>
             </div>
           </div>
@@ -340,21 +341,23 @@ export default function AdminAnnotator() {
           <DialogHeader>
             <DialogTitle>
               {pending?.kind === 'reassign'
-                ? `Move ${n} ${itemsWord} to ${targetPerson?.name || targetPerson?.email}?`
-                : `Unassign ${n} ${itemsWord}?`}
+                ? t('dedup.admin.annotator.confirmMove', { count: n, n: formatNumber(n), name: targetName })
+                : t('dedup.admin.annotator.confirmUnassign', { count: n, n: formatNumber(n) })}
             </DialogTitle>
             <DialogDescription>
               {pending?.kind === 'reassign'
-                ? `They move from ${person?.name || person?.email || 'this annotator'}'s list to ${targetPerson?.name || targetPerson?.email}'s To do list. The pair's other annotator keeps their place.`
-                : `They leave ${person?.name || person?.email || 'this annotator'}'s list. The next annotator who clicks “Assign me work” gets them. The pair's other annotator keeps their place.`}
+                ? t('dedup.admin.annotator.confirmMoveHelp', { from: who, to: targetName })
+                : t('dedup.admin.annotator.confirmUnassignHelp', { from: who })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" className="cursor-pointer" onClick={() => setPending(null)}>
-              Cancel
+              {t('dedup.common.cancel')}
             </Button>
             <Button className="cursor-pointer" onClick={confirm} disabled={reassign.isPending}>
-              {reassign.isPending ? 'Saving…' : pending?.kind === 'reassign' ? 'Move' : 'Unassign'}
+              {reassign.isPending
+                ? t('dedup.common.saving')
+                : t(pending?.kind === 'reassign' ? 'dedup.admin.annotator.move' : 'dedup.admin.annotator.unassign')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -371,6 +374,7 @@ const VERDICT_STYLE: Record<string, string> = {
 };
 
 function ItemStatus({ item }: Readonly<{ item: ReviewItem }>) {
+  const { t } = useTranslation();
   if (isDecided(item)) {
     return (
       <span
@@ -386,12 +390,12 @@ function ItemStatus({ item }: Readonly<{ item: ReviewItem }>) {
   if (hasIssue(item)) {
     return (
       <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-        Problem reported · needs an answer
+        {t('dedup.queue.problemNeedsAnswer')}
       </span>
     );
   }
   if (item.assignment?.first_opened_at) {
-    return <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">Opened</span>;
+    return <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">{t('dedup.admin.annotators.col.opened')}</span>;
   }
-  return <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">Not opened</span>;
+  return <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">{t('dedup.admin.annotators.col.notOpened')}</span>;
 }

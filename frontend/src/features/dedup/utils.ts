@@ -1,9 +1,21 @@
+import i18n from '@/i18n/config';
 import type { ReviewItem } from './api/review';
 
-const ORDINAL = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth'];
+// Labels below read the current language's `dedup.*` texts from the translation files
+// (src/i18n/locales/<lang>/translation.json); anything untranslated shows in English.
+const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
+const TIBETAN_DIGITS = '༠༡༢༣༤༥༦༧༨༩';
+
+/** A count for display: grouped digits ("136,011"), in Tibetan digits when the app is in Tibetan. */
+export function formatNumber(n: number): string {
+  const s = n.toLocaleString();
+  return i18n.language?.startsWith('bo') ? s.replace(/\d/g, (d) => TIBETAN_DIGITS[Number(d)]) : s;
+}
+
+/** "First batch" … "Tenth batch", then "Batch 11". */
 export function ordinalBatch(n: number): string {
-  return ORDINAL[n - 1] ? `${ORDINAL[n - 1]} batch` : `Batch ${n}`;
+  return n >= 1 && n <= 10 ? t(`dedup.batch.ordinal${n}`) : t('dedup.batch.numbered', { n });
 }
 
 /**
@@ -18,17 +30,9 @@ export function batchNames(batches: { batch_id: string; created_at: string | nul
   return Object.fromEntries(sorted.map((b, i) => [b.batch_id, ordinalBatch(i + 1)]));
 }
 
-export const VERDICT_LABEL: Record<string, string> = {
-  same: 'Same work',
-  different: 'Different',
-  contains: 'A contains B',
-  part_of: 'B contains A',
-  not_sure: 'Not sure',
-  source_dup: 'Source duplicate',
-};
-
+/** same | different | contains | part_of | not_sure | source_dup, as a label. */
 export function verdictLabel(verdict: string): string {
-  return VERDICT_LABEL[verdict] ?? verdict;
+  return t(`dedup.verdict.${verdict}`, { defaultValue: verdict });
 }
 
 export function isDecided(item: Pick<ReviewItem, 'verdict'>): boolean {
@@ -53,92 +57,80 @@ export const pct = (v: number | null | undefined) => (v == null ? '—' : `${Mat
 
 /** One-line reading of the jaccard for reviewers; the raw `evidence.why` stays in the details. */
 export function overlapNote(j: number): string {
-  if (j >= 0.8) return 'Strong overlap — likely the same work';
-  if (j >= 0.5) return 'Partial overlap — needs your decision';
-  return 'Weak overlap — read both carefully';
+  if (j >= 0.8) return t('dedup.overlap.strong');
+  if (j >= 0.5) return t('dedup.overlap.partial');
+  return t('dedup.overlap.weak');
 }
-
-const SOURCE_LABEL: Record<string, string> = {
-  tei: 'Typed transcription',
-  paddleocr_v2: 'Scanned · OCR',
-};
 
 export function sourceLabel(etextSource: string | null | undefined): string | null {
   if (!etextSource) return null;
-  return SOURCE_LABEL[etextSource] ?? etextSource;
+  return t(`dedup.source.${etextSource}`, { defaultValue: etextSource });
 }
 
-export const ABSTENTION_LABEL: Record<string, string> = {
-  insufficient_evidence: "Can't tell from what's shown",
-  genuinely_ambiguous: 'Genuinely ambiguous',
-  needs_image_or_metadata: 'Needs scans or catalogue details',
-  technical_failure: 'Text garbled or unreadable',
-  out_of_scope: 'Outside this review',
-};
+/** Why an annotator could not answer (verdict not_sure). */
+export function abstentionLabel(reason: string): string {
+  return t(`dedup.abstention.${reason}`, { defaultValue: reason });
+}
 
-// How an adjudicator settled a disputed pair.
-export const RESOLUTION_LABEL: Record<string, string> = {
-  sided_with_1: 'Agreed with annotator 1',
-  sided_with_2: 'Agreed with annotator 2',
-  new_label: 'Chose a different answer',
-  unresolved: 'Unresolved (also could not answer)',
-};
+/** How an adjudicator settled a disputed pair. */
+export function resolutionLabel(resolution: string): string {
+  return t(`dedup.resolution.${resolution}`, { defaultValue: resolution });
+}
 
 /** An answer as a short label: "Can't answer" for not_sure. */
 export function answerLabel(verdict: string | null | undefined): string {
   if (!verdict) return '—';
-  return verdict === 'not_sure' ? "Can't answer" : verdictLabel(verdict);
+  return verdict === 'not_sure' ? t('dedup.answer.cantAnswer') : verdictLabel(verdict);
 }
 
 // Answers grouped like the answer buttons: "Contains / part of" covers its dialog's
 // three choices. `text`/`bar` are the group's colours as text and as a bar segment.
-export const ANSWER_GROUPS = [
-  { label: 'Same', keys: ['same'], badge: 'bg-green-50 text-green-700', text: 'text-green-700', bar: 'bg-green-500' },
-  { label: 'Different', keys: ['different'], badge: 'bg-red-50 text-red-700', text: 'text-red-700', bar: 'bg-red-500' },
+const ANSWER_GROUPS = [
+  { id: 'same', keys: ['same'], badge: 'bg-green-50 text-green-700', text: 'text-green-700', bar: 'bg-green-500' },
+  { id: 'different', keys: ['different'], badge: 'bg-red-50 text-red-700', text: 'text-red-700', bar: 'bg-red-500' },
   {
-    label: 'Contains / part of',
+    id: 'contains',
     keys: ['contains', 'part_of', 'source_dup'],
     badge: 'bg-gray-100 text-gray-700',
     text: 'text-gray-600',
     bar: 'bg-gray-400',
   },
-  { label: "Can't answer", keys: ['not_sure'], badge: 'bg-amber-50 text-amber-800', text: 'text-amber-700', bar: 'bg-amber-400' },
+  { id: 'cantAnswer', keys: ['not_sure'], badge: 'bg-amber-50 text-amber-800', text: 'text-amber-700', bar: 'bg-amber-400' },
 ] as const;
 
 const ANSWER_DETAIL: Record<string, string> = {
-  contains: 'A contains B',
-  part_of: 'B contains A',
-  source_dup: 'Same source entered twice',
+  contains: 'dedup.answer.detail.contains',
+  part_of: 'dedup.answer.detail.part_of',
+  source_dup: 'dedup.answer.detail.source_dup',
 };
 
-/** Per-group counts of a person's answers, plus a hover text with the exact split. */
+/** Per-group counts of a person's answers (pass `{}` for the labels alone), plus a hover
+ * text with the exact split. */
 export function answerGroups(answers: Record<string, number>) {
   return ANSWER_GROUPS.map((g) => ({
     ...g,
+    label: t(`dedup.answerGroup.${g.id}`),
     n: g.keys.reduce((s, k) => s + (answers[k] ?? 0), 0),
-    detail: g.keys.length > 1 ? g.keys.map((k) => `${ANSWER_DETAIL[k] ?? k}: ${answers[k] ?? 0}`).join(' · ') : undefined,
+    detail:
+      g.keys.length > 1
+        ? g.keys.map((k) => `${ANSWER_DETAIL[k] ? t(ANSWER_DETAIL[k]) : k}: ${answers[k] ?? 0}`).join(' · ')
+        : undefined,
   }));
 }
 
-export const ISSUE_LABEL: Record<string, string> = {
-  author_conflict: 'Authors conflict',
-  wrong_author: 'Author is wrong',
-  undersegmented: 'One text holds several works',
-  oversegmented: 'One work split across documents',
-  convention: 'Divided at different places',
-  anthology_suspected: 'Looks like an anthology',
-  source_dup: 'Passage repeated inside a text',
-  other: 'Other problem',
-};
+/** A reported data problem, as a label. */
+export function issueLabel(kind: string): string {
+  return t(`dedup.issue.${kind}`, { defaultValue: kind });
+}
 
 /** 75 -> "1 min 15 s". */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null) return '—';
   const s = Math.round(seconds);
-  if (s < 60) return `${s} s`;
+  if (s < 60) return t('dedup.duration.seconds', { s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ${s % 60} s`;
-  return `${Math.floor(m / 60)} h ${m % 60} min`;
+  if (m < 60) return t('dedup.duration.minutes', { m, s: s % 60 });
+  return t('dedup.duration.hours', { h: Math.floor(m / 60), m: m % 60 });
 }
 
 export function formatDateTime(iso: string | null | undefined): string {

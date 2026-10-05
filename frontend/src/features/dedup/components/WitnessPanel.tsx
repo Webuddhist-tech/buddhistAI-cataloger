@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { WitnessCard } from '../api/review';
 import { useFullText } from '../hooks/useReview';
-import { displayText } from '../utils';
+import { displayText, formatNumber } from '../utils';
 import { WitnessMeta } from './SourceBadge';
 
 // The item only carries `head` / `tail` (~220 characters each); the full text is
 // fetched when asked for.
 export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard }>) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const full = useFullText(card.mw_id, expanded);
   const head = card.head ?? '';
@@ -24,12 +26,12 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
           </span>
           <div className="min-w-0">
             <h2 className="break-words font-monlam text-lg leading-relaxed text-gray-900 sm:text-xl">
-              {card.title_bo || <span className="font-sans text-sm italic text-gray-400">no title</span>}
+              {card.title_bo || <span className="font-sans text-sm italic text-gray-400">{t('dedup.witness.noTitle')}</span>}
             </h2>
             {card.author_name_bo ? (
               <div className="font-monlam text-base text-gray-700">{card.author_name_bo}</div>
             ) : (
-              <div className="text-sm italic text-gray-400">no author</div>
+              <div className="text-sm italic text-gray-400">{t('dedup.witness.noAuthor')}</div>
             )}
           </div>
         </div>
@@ -41,15 +43,15 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
       {expanded ? (
         <div className="px-4 py-4 sm:px-5 sm:py-5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] uppercase tracking-wide text-gray-400">Full text</span>
+            <span className="text-[11px] uppercase tracking-wide text-gray-400">{t('dedup.witness.fullText')}</span>
             <ToggleButton onClick={() => setExpanded(false)}>
-              <ChevronUp className="h-3.5 w-3.5" /> Show less
+              <ChevronUp className="h-3.5 w-3.5" /> {t('dedup.witness.showLess')}
             </ToggleButton>
           </div>
-          {full.isLoading && <div className="py-8 text-center text-sm text-gray-500">Loading full text…</div>}
+          {full.isLoading && <div className="py-8 text-center text-sm text-gray-500">{t('dedup.witness.loadingFullText')}</div>}
           {full.error && (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <strong>Full text not available.</strong> {full.error.message}
+              <strong>{t('dedup.witness.fullTextUnavailable')}</strong> {full.error.message}
             </div>
           )}
           {full.data && (
@@ -60,15 +62,17 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
         </div>
       ) : (
         <div className="whitespace-pre-wrap break-words px-4 py-4 font-monlam text-lg leading-loose text-gray-900 sm:px-5 sm:py-5 sm:text-xl">
-          <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">Opening</div>
-          {displayText(head) || <span className="font-sans text-sm italic text-gray-400">no text returned</span>}
+          <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">{t('dedup.witness.opening')}</div>
+          {displayText(head) || <span className="font-sans text-sm italic text-gray-400">{t('dedup.witness.noText')}</span>}
 
           {unseen > 0 && (
             <div className="my-4 flex items-center gap-3 font-sans">
               <span className="h-px flex-1 bg-gray-200" />
               <ToggleButton onClick={() => setExpanded(true)}>
-                <ChevronDown className="h-3.5 w-3.5" /> Show full text
-                <span className="hidden text-gray-400 sm:inline">· {unseen.toLocaleString()} more characters</span>
+                <ChevronDown className="h-3.5 w-3.5" /> {t('dedup.witness.showFullText')}
+                <span className="hidden text-gray-400 sm:inline">
+                  · {t('dedup.witness.moreCharacters', { n: formatNumber(unseen) })}
+                </span>
               </ToggleButton>
               <span className="h-px flex-1 bg-gray-200" />
             </div>
@@ -76,7 +80,7 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
 
           {tail && (
             <>
-              <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">Ending</div>
+              <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">{t('dedup.witness.ending')}</div>
               {displayText(tail)}
             </>
           )}

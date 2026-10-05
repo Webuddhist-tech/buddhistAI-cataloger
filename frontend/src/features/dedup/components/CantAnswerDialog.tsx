@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,77 +12,58 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import type { DecisionInput, ReviewIssue, ReviewItem } from '../api/review';
-import { ISSUE_LABEL, hasIssue, verdictLabel } from '../utils';
+import { hasIssue, issueLabel, verdictLabel } from '../utils';
 
 // Values from the review plan (§5 decision / issue, §10 abstention reasons):
 //   answer -> a verdict about the pair ("not_sure" + an abstention_reason for "can't answer")
 //   issue  -> a data problem reported alongside the verdict, never instead of it
-type Answer = { key: string; label: string; help: string; fields: DecisionInput };
-type IssueOption = { kind: string; help: string; needsNote?: boolean };
+// Labels and help texts: dedup.cantAnswer.* in the translation files, by these keys.
+type Answer = { key: string; fields: DecisionInput };
+type IssueOption = { kind: string; needsNote?: boolean };
 
 export type CantAnswerStart = 'default' | 'contains' | 'issue';
 
 // C = contains/part-of, Space = can't answer (plan §11 Screen 1). Both can also carry a
 // data problem; X adds one to an answer already saved.
-const ANSWER_GROUPS: { mode: CantAnswerStart; title: string; description: string; answers: Answer[] }[] = [
+const ANSWER_GROUPS: { mode: CantAnswerStart; answers: Answer[] }[] = [
   {
     mode: 'contains',
-    title: 'Contains / part-of',
-    description: 'One text is inside the other, or both are the same source entered twice.',
     answers: [
       {
         key: 'a_contains_b',
-        label: 'A contains B',
-        help: 'B is an excerpt or chapter of A.',
         fields: { verdict: 'contains' },
       },
       {
         key: 'b_contains_a',
-        label: 'B contains A',
-        help: 'A is an excerpt or chapter of B.',
         fields: { verdict: 'part_of' },
       },
       {
         key: 'source_dup_verdict',
-        label: 'Same source entered twice',
-        help: 'Both come from the same scan or volume: a duplicate entry, not a separate edition.',
         fields: { verdict: 'source_dup' },
       },
     ],
   },
   {
     mode: 'default',
-    title: "Can't answer",
-    description: 'Pick the reason you cannot decide this pair.',
     answers: [
       {
         key: 'insufficient_evidence',
-        label: "Can't tell from what's shown",
-        help: 'Not enough to judge, even with the full texts.',
         fields: { verdict: 'not_sure', abstention_reason: 'insufficient_evidence' },
       },
       {
         key: 'genuinely_ambiguous',
-        label: 'Genuinely ambiguous',
-        help: 'I read both and still cannot say.',
         fields: { verdict: 'not_sure', abstention_reason: 'genuinely_ambiguous' },
       },
       {
         key: 'needs_image_or_metadata',
-        label: 'Need the scans or catalogue details',
-        help: 'Deciding would need the page images or more information than is shown.',
         fields: { verdict: 'not_sure', abstention_reason: 'needs_image_or_metadata' },
       },
       {
         key: 'technical_failure',
-        label: 'Text is garbled or unreadable',
-        help: 'OCR noise, empty text, or broken encoding.',
         fields: { verdict: 'not_sure', abstention_reason: 'technical_failure' },
       },
       {
         key: 'out_of_scope',
-        label: 'Outside this review',
-        help: 'This pair is not something this review can decide.',
         fields: { verdict: 'not_sure', abstention_reason: 'out_of_scope' },
       },
     ],
@@ -89,14 +71,14 @@ const ANSWER_GROUPS: { mode: CantAnswerStart; title: string; description: string
 ];
 
 const ISSUES: IssueOption[] = [
-  { kind: 'author_conflict', help: 'Same text, but the two list different authors.' },
-  { kind: 'wrong_author', help: 'The listed author is simply incorrect.' },
-  { kind: 'undersegmented', help: 'This document should have been split.' },
-  { kind: 'oversegmented', help: 'These are fragments of a single work.' },
-  { kind: 'convention', help: 'The same work, but the two are split by different segmentation conventions.' },
-  { kind: 'anthology_suspected', help: 'A text seems to contain many unrelated works.' },
-  { kind: 'source_dup', help: 'A block of text is copied twice within one document (an import error).' },
-  { kind: 'other', help: 'Describe it in the note.', needsNote: true },
+  { kind: 'author_conflict' },
+  { kind: 'wrong_author' },
+  { kind: 'undersegmented' },
+  { kind: 'oversegmented' },
+  { kind: 'convention' },
+  { kind: 'anthology_suspected' },
+  { kind: 'source_dup' },
+  { kind: 'other', needsNote: true },
 ];
 
 type Which = 'both' | 'a' | 'b';
@@ -110,6 +92,7 @@ interface Props {
 }
 
 export default function CantAnswerDialog({ open, onOpenChange, item, start, onSubmit }: Props) {
+  const { t } = useTranslation();
   const group = start === 'issue' ? null : (ANSWER_GROUPS.find((g) => g.mode === start) ?? ANSWER_GROUPS[1]);
   const initialAnswer = group?.answers[0].key ?? '';
   const [answerKey, setAnswerKey] = useState(initialAnswer);
@@ -160,7 +143,7 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
     <div className="space-y-3">
       {group && (
         <label className="block text-sm">
-          <span className="mb-1 block text-gray-600">Problem</span>
+          <span className="mb-1 block text-gray-600">{t('dedup.cantAnswer.problem')}</span>
           <select
             value={issueKind}
             onChange={(e) => setIssueKind(e.target.value)}
@@ -168,27 +151,27 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
           >
             {ISSUES.map((i) => (
               <option key={i.kind} value={i.kind}>
-                {ISSUE_LABEL[i.kind]}
+                {issueLabel(i.kind)}
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-xs text-gray-500">{issue.help}</span>
+          <span className="mt-1 block text-xs text-gray-500">{t(`dedup.cantAnswer.issueHelp.${issue.kind}`)}</span>
         </label>
       )}
       <label className="block text-sm">
-        <span className="mb-1 block text-gray-600">Which text?</span>
+        <span className="mb-1 block text-gray-600">{t('dedup.cantAnswer.whichText')}</span>
         <select
           value={which}
           onChange={(e) => setWhich(e.target.value as Which)}
           className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
         >
-          <option value="both">Both</option>
-          <option value="a">A only</option>
-          <option value="b">B only</option>
+          <option value="both">{t('dedup.cantAnswer.both')}</option>
+          <option value="a">{t('dedup.cantAnswer.aOnly')}</option>
+          <option value="b">{t('dedup.cantAnswer.bOnly')}</option>
         </select>
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-gray-600">{issue.needsNote ? 'Note (required)' : 'Note (optional)'}</span>
+        <span className="mb-1 block text-gray-600">{t(issue.needsNote ? 'dedup.cantAnswer.noteRequired' : 'dedup.cantAnswer.noteOptional')}</span>
         <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
       </label>
     </div>
@@ -198,15 +181,27 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{group ? group.title : 'Report a data problem'}</DialogTitle>
-          <DialogDescription>{group ? group.description : issueDescription(item)}</DialogDescription>
+          <DialogTitle>
+            {group ? t(`dedup.cantAnswer.group.${group.mode}.title`) : t('dedup.cantAnswer.reportTitle')}
+          </DialogTitle>
+          <DialogDescription>
+            {group
+              ? t(`dedup.cantAnswer.group.${group.mode}.description`)
+              : t(item.verdict ? 'dedup.cantAnswer.reportDescriptionWithAnswer' : 'dedup.cantAnswer.reportDescription', {
+                  answer: item.verdict ? verdictLabel(item.verdict) : '',
+                })}
+          </DialogDescription>
         </DialogHeader>
 
         {group ? (
           <>
             <RadioList
-              label={group.title}
-              options={group.answers.map((a) => ({ value: a.key, label: a.label, help: a.help }))}
+              label={t(`dedup.cantAnswer.group.${group.mode}.title`)}
+              options={group.answers.map((a) => ({
+                value: a.key,
+                label: t(`dedup.cantAnswer.option.${a.key}.label`),
+                help: t(`dedup.cantAnswer.option.${a.key}.help`),
+              }))}
               value={answerKey}
               onChange={setAnswerKey}
             />
@@ -218,7 +213,7 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
                 aria-expanded={reporting}
               >
                 {reporting ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                Also report a data problem <span className="text-gray-400">(optional)</span>
+                {t('dedup.cantAnswer.alsoReport')} <span className="text-gray-400">{t('dedup.cantAnswer.optional')}</span>
               </button>
               {reporting && <div className="border-t border-gray-200 p-3">{issueForm}</div>}
             </div>
@@ -227,12 +222,16 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
           <>
             {hasIssue(item) && (
               <p className="text-xs text-gray-500">
-                Already reported: {item.issues!.map((i) => ISSUE_LABEL[i.kind] ?? i.kind).join(', ')}
+                {t('dedup.cantAnswer.alreadyReported', { list: item.issues!.map((i) => issueLabel(i.kind)).join(', ') })}
               </p>
             )}
             <RadioList
-              label="Data problem"
-              options={ISSUES.map((i) => ({ value: i.kind, label: ISSUE_LABEL[i.kind], help: i.help }))}
+              label={t('dedup.cantAnswer.dataProblem')}
+              options={ISSUES.map((i) => ({
+                value: i.kind,
+                label: issueLabel(i.kind),
+                help: t(`dedup.cantAnswer.issueHelp.${i.kind}`),
+              }))}
               value={issueKind}
               onChange={setIssueKind}
             />
@@ -242,20 +241,15 @@ export default function CantAnswerDialog({ open, onOpenChange, item, start, onSu
 
         <DialogFooter>
           <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('dedup.common.cancel')}
           </Button>
           <Button className="cursor-pointer" onClick={submit} disabled={busy || noteMissing}>
-            {busy ? 'Saving…' : group ? 'Save' : 'Report problem'}
+            {busy ? t('dedup.common.saving') : t(group ? 'dedup.common.save' : 'dedup.cantAnswer.reportButton')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
-
-function issueDescription(item: ReviewItem): string {
-  const answer = item.verdict ? ` (${verdictLabel(item.verdict)})` : '';
-  return `Added to your answer${answer}, which stays as it is. Reported for fixing later.`;
 }
 
 function RadioList({

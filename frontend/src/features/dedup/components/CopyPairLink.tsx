@@ -1,4 +1,5 @@
 import { Link2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
@@ -9,12 +10,13 @@ function pairLink(itemId: number): string {
 
 // For pasting a pair into a spreadsheet or a message.
 export default function CopyPairLink({ itemId }: Readonly<{ itemId: number }>) {
+  const { t } = useTranslation();
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(pairLink(itemId));
-      toast.success('Link copied');
+      toast.success(t('dedup.copyLink.copied'));
     } catch {
-      toast.error('Could not copy. Copy it from here: ' + pairLink(itemId));
+      toast.error(t('dedup.copyLink.failed', { link: pairLink(itemId) }));
     }
   };
   return (
@@ -23,10 +25,10 @@ export default function CopyPairLink({ itemId }: Readonly<{ itemId: number }>) {
       size="sm"
       className="cursor-pointer"
       onClick={copy}
-      title="Copy a link to this pair (read-only: no answers, no buttons)"
-      aria-label="Copy link to this pair"
+      title={t('dedup.copyLink.title')}
+      aria-label={t('dedup.copyLink.ariaLabel')}
     >
-      <Link2 className="h-4 w-4" /> <span className="hidden sm:inline">Copy link</span>
+      <Link2 className="h-4 w-4" /> <span className="hidden sm:inline">{t('dedup.copyLink.label')}</span>
     </Button>
   );
 }
