@@ -92,6 +92,18 @@ export default function PairEvidence({
             <Metric k="Author match" v={pct(m.author_lev)} note={m.author_lev == null ? 'no author data' : undefined} />
             <Metric k="Length ratio" v={m.len_ratio != null ? m.len_ratio.toFixed(2) : '—'} note="1.00 = same length" />
             <Metric k="Same scan" v={m.same_rep == null ? '—' : m.same_rep ? 'yes' : 'no'} note="both from one reproduction" />
+            {/* BDRC ids, so a pair can be looked up in the source data. */}
+            <div className="col-span-full grid grid-cols-1 gap-x-6 gap-y-2 border-t border-gray-100 pt-3 sm:grid-cols-2">
+              {[
+                ['Text A id', cardA.mw_id],
+                ['Text B id', cardB.mw_id],
+              ].map(([k, id]) => (
+                <div key={k} className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">{k}</div>
+                  <div className="select-all break-all font-mono text-xs text-gray-700">{id || '—'}</div>
+                </div>
+              ))}
+            </div>
             {ev.why && (
               <div className="col-span-full break-all border-t border-gray-100 pt-3 font-mono text-xs text-gray-400">
                 {ev.why}

@@ -1,7 +1,7 @@
 """SQLAlchemy data access for outliner_document rows."""
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, case, exists, func, not_, or_, select
@@ -310,10 +310,19 @@ def fetch_random_completed_unassigned_document(
     return _random_completed_unassigned_document(db, exclude_user_id=exclude_user_id)
 
 
+# Spot checks favour recent work, so new reviewers' documents come up instead of being
+# lost among months of older approved documents.
+SPOT_CHECK_RECENT_DAYS = 10
+
+
 def fetch_random_reviewed_document_ids(
-    db: Session, limit: int = 5
+    db: Session, limit: int = 5, recent_days: int = SPOT_CHECK_RECENT_DAYS
 ) -> List[Tuple[str, Optional[str]]]:
     """Return up to ``limit`` random (id, filename) pairs with status ``approved`` (fully reviewed).
+
+    Picks first among documents reviewed in the last ``recent_days`` (a segment's
+    ``reviewed_at`` in that window); only when there are fewer than ``limit`` of those
+    is the rest filled with older approved documents, also at random.
 
     Excludes legacy "Unknown" documents that have no reviewer on the document,
     no reviewed_by_id on any segment, and no segment_reviews rows.
@@ -328,17 +337,30 @@ def fetch_random_reviewed_document_ids(
         select(SegmentReview.id)
         .where(SegmentReview.document_id == OutlinerDocument.id)
     )
-    rows = (
-        db.query(OutlinerDocument.id, OutlinerDocument.filename)
-        .filter(
-            OutlinerDocument.status == "approved",
-            or_(has_doc_reviewer, has_segment_reviewer, has_review_decision),
-        )
-        .order_by(func.random())
-        .limit(limit)
-        .all()
+    reviewed_recently = exists(
+        select(OutlinerSegment.id)
+        .where(OutlinerSegment.document_id == OutlinerDocument.id)
+        .where(OutlinerSegment.reviewed_at >= datetime.utcnow() - timedelta(days=recent_days))
     )
-    return [(row[0], row[1]) for row in rows]
+
+    def pick(recent: bool, n: int) -> List[Tuple[str, Optional[str]]]:
+        rows = (
+            db.query(OutlinerDocument.id, OutlinerDocument.filename)
+            .filter(
+                OutlinerDocument.status == "approved",
+                or_(has_doc_reviewer, has_segment_reviewer, has_review_decision),
+                reviewed_recently if recent else not_(reviewed_recently),
+            )
+            .order_by(func.random())
+            .limit(n)
+            .all()
+        )
+        return [(row[0], row[1]) for row in rows]
+
+    picked = pick(True, limit)
+    if len(picked) < limit:
+        picked += pick(False, limit - len(picked))
+    return picked
 
 
 def increment_document_submit_count(db: Session, document_id: str) -> None:

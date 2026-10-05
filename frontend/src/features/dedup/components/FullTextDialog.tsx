@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronsUpDown, Columns2, Rows2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { DiffGranularity, WitnessCard } from '../api/review';
-import { buildDiffRows, foldRows, withoutNewlines, type DiffRow, type Piece } from '../diffRows';
+import { buildDiffRows, dtypeOf, foldRows, typeCode, withoutNewlines, type DiffRow, type Piece } from '../diffRows';
 import { useFullText, useTextDiff } from '../hooks/useReview';
+import { displayText } from '../utils';
 import { SourceBadge, WitnessMeta } from './SourceBadge';
 
 // Opens over the review page so Esc returns the reviewer to where they were. Full-text
@@ -142,7 +143,7 @@ function TextPane({ tag, card, className = 'flex' }: Readonly<{ tag: 'A' | 'B'; 
         )}
         {text.data && (
           <div className="whitespace-pre-wrap break-words font-monlam text-lg leading-loose text-gray-900 sm:text-xl">
-            {text.data.text_bo}
+            {displayText(text.data.text_bo)}
           </div>
         )}
       </div>
@@ -171,11 +172,23 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
     const raw = diff.data?.diff ?? [];
     return diff.data?.granularity === 'line' ? raw : withoutNewlines(raw);
   }, [diff.data]);
-  const rows = useMemo(() => buildDiffRows(chunks), [chunks]);
+  // BDRC marks differences that are only punctuation or spaces (tsheg, shad, …):
+  // shown as plain text unless asked for, so the real differences stand out.
+  const [showPunctuation, setShowPunctuation] = useState(false);
+  const punctuation = typeCode(diff.data?.types, 'punctuation');
+  const quiet = showPunctuation ? undefined : punctuation;
+  const rows = useMemo(() => buildDiffRows(chunks, quiet), [chunks, quiet]);
   const blocks = useMemo(() => foldRows(rows), [rows]);
   // Each side numbered on its own: a row only one copy has gets no number on the other.
   const nums = useMemo(() => numberRows(rows), [rows]);
-  const changes = useMemo(() => chunks.filter((c) => c[0] !== 0).length, [chunks]);
+  const punctuationCount = useMemo(
+    () => (punctuation === undefined ? 0 : chunks.filter((c) => dtypeOf(c) === punctuation).length),
+    [chunks, punctuation],
+  );
+  const changes = useMemo(
+    () => chunks.filter((c) => c[0] !== 0 && (quiet === undefined || dtypeOf(c) !== quiet)).length,
+    [chunks, quiet],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -206,6 +219,17 @@ function DiffView({ a, b }: Readonly<{ a: WitnessCard; b: WitnessCard }>) {
             <strong className="tabular-nums text-gray-900">{Math.round(diff.data.ratio * 100)}%</strong> the same ·{' '}
             <span className="tabular-nums">{changes.toLocaleString()}</span> {changes === 1 ? 'change' : 'changes'}
           </span>
+        )}
+        {punctuationCount > 0 && (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-gray-600">
+            <input
+              type="checkbox"
+              className="cursor-pointer"
+              checked={showPunctuation}
+              onChange={(e) => setShowPunctuation(e.target.checked)}
+            />
+            Show punctuation differences
+          </label>
         )}
         <label className="ml-auto inline-flex items-center gap-2 text-gray-600">
           Compare by

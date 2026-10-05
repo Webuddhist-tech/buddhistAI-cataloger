@@ -6,6 +6,18 @@ import type { DiffChunk } from './api/review';
 
 const NEWLINES = /\r?\n/g;
 
+/** A changed chunk's difference type (e.g. punctuation only), if BDRC sent one. */
+export function dtypeOf(c: DiffChunk): number | undefined {
+  if (c[0] === 0) return undefined;
+  return c[0] === 1 ? c[3] : c[2];
+}
+
+/** The code BDRC uses for a difference type name, read from the response's legend. */
+export function typeCode(types: Record<string, string> | undefined, name: string): number | undefined {
+  const hit = Object.entries(types ?? {}).find(([, v]) => v === name);
+  return hit ? Number(hit[0]) : undefined;
+}
+
 /**
  * BDRC's chunks with every newline removed. OCR keeps the printed page's line breaks,
  * which differ between editions: a newline only one copy has would otherwise count as
@@ -19,8 +31,11 @@ export function withoutNewlines(chunks: DiffChunk[]): DiffChunk[] {
   const push = (c: DiffChunk) => {
     const last = out.at(-1);
     if (last && last[0] === c[0]) {
-      if (last[0] === 1 && c[0] === 1) out[out.length - 1] = [1, last[1] + c[1], last[2] + c[2]];
-      else out[out.length - 1] = [last[0], last[1] + c[1]] as DiffChunk;
+      // Merged neighbours keep a difference type only if they share it.
+      const t = dtypeOf(last) === dtypeOf(c) ? dtypeOf(c) : 0;
+      if (last[0] === 1 && c[0] === 1) out[out.length - 1] = [1, last[1] + c[1], last[2] + c[2], t];
+      else if (last[0] === 0) out[out.length - 1] = [0, last[1] + c[1]];
+      else out[out.length - 1] = [last[0], last[1] + c[1], t] as DiffChunk;
     } else {
       out.push(c);
     }
@@ -29,14 +44,16 @@ export function withoutNewlines(chunks: DiffChunk[]): DiffChunk[] {
     if (c[0] === 1) {
       const a = c[1].replace(NEWLINES, '');
       const b = c[2].replace(NEWLINES, '');
+      const t = c[3];
       if (a === b) {
         if (a) push([0, a]);
-      } else if (!a) push([3, b]);
-      else if (!b) push([2, a]);
-      else push([1, a, b]);
+      } else if (!a) push([3, b, t]);
+      else if (!b) push([2, a, t]);
+      else push([1, a, b, t]);
     } else {
       const text = c[1].replace(NEWLINES, '');
-      if (text) push([c[0], text] as DiffChunk);
+      if (!text) continue;
+      push(c[0] === 0 ? [0, text] : ([c[0], text, c[2]] as DiffChunk));
     }
   }
   return out;
@@ -49,7 +66,11 @@ const ROW_CHARS = 80;
 // Split same-in-both text after a newline, or after a shad (with its trailing space).
 const BREAKS = /(\n|།+ *)/;
 
-export function buildDiffRows(chunks: DiffChunk[]): DiffRow[] {
+/**
+ * `quiet` is a difference type (e.g. punctuation only) to show as plain text: each
+ * side keeps its own text, unmarked, and the row does not count as changed.
+ */
+export function buildDiffRows(chunks: DiffChunk[], quiet?: number): DiffRow[] {
   const rows: DiffRow[] = [];
   let cur: DiffRow = { a: [], b: [], changed: false };
   let len = 0;
@@ -77,16 +98,17 @@ export function buildDiffRows(chunks: DiffChunk[]): DiffRow[] {
         if (sep.includes('\n') || (sep && len >= ROW_CHARS)) flush();
       }
     } else {
-      cur.changed = true;
+      const changed = quiet === undefined || dtypeOf(c) !== quiet;
+      if (changed) cur.changed = true;
       if (c[0] === 1) {
-        add('a', c[1], true);
-        add('b', c[2], true);
+        add('a', c[1], changed);
+        add('b', c[2], changed);
         len += Math.max(c[1].length, c[2].length);
       } else if (c[0] === 2) {
-        add('a', c[1], true);
+        add('a', c[1], changed);
         len += c[1].length;
       } else {
-        add('b', c[1], true);
+        add('b', c[1], changed);
         len += c[1].length;
       }
     }

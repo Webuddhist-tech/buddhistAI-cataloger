@@ -301,6 +301,31 @@ def annotator_answers(db: Session, item_id: int) -> dict[int, DedupDecision]:
     return annotator_answers_for(db, [item_id])[item_id]
 
 
+def answer_counts_by_user(db: Session) -> dict[str, dict[str, int]]:
+    """``{user_id: {verdict: n}}``: each annotator's own current answer per pair (a
+    changed answer counts once, as its latest verdict; adjudicator answers excluded)."""
+    latest = (
+        select(
+            DedupDecision.user_id,
+            DedupDecision.verdict,
+            func.row_number()
+            .over(partition_by=(DedupDecision.item_id, DedupDecision.user_id), order_by=_NEWEST_FIRST)
+            .label("rn"),
+        )
+        .where(DedupDecision.role == ROLE_ANNOTATOR)
+        .subquery()
+    )
+    rows = db.execute(
+        select(latest.c.user_id, latest.c.verdict, func.count())
+        .where(latest.c.rn == 1, latest.c.verdict.is_not(None))
+        .group_by(latest.c.user_id, latest.c.verdict)
+    ).all()
+    out: dict[str, dict[str, int]] = {}
+    for uid, verdict, n in rows:
+        out.setdefault(uid, {})[verdict] = n
+    return out
+
+
 def answered_pairs(db: Session) -> list[tuple[int, list[str]]]:
     """Double-review pairs both annotators have answered, with who answered."""
     rows = db.execute(

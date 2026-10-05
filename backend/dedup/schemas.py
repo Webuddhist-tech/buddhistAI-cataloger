@@ -246,6 +246,9 @@ class AnnotatorOut(WorkCounts):
     agreed: int = 0
     # Pairs this person settled as adjudicator.
     adjudicated: int = 0
+    # Their own current answer per pair they annotated, counted by verdict
+    # (same | different | contains | part_of | source_dup | not_sure).
+    answers: dict[str, int] = Field(default_factory=dict)
 
 
 class ReassignIn(BaseModel):

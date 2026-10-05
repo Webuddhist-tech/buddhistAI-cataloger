@@ -106,6 +106,7 @@ def annotators(db: Session) -> list[AnnotatorOut]:
             paired[uid] += 1
             agreed[uid] += item_id not in disputed
     adjudicated = Counter(a.user_id for a in repo.all_adjudications(db) if a.completed_at)
+    answers = repo.answer_counts_by_user(db)
     time = repo.active_seconds(db)
     total_by_user: dict[str, int] = {}
     for (_, u), s in time.items():
@@ -138,6 +139,7 @@ def annotators(db: Session) -> list[AnnotatorOut]:
                 paired=paired[uid],
                 agreed=agreed[uid],
                 adjudicated=adjudicated[uid],
+                answers=answers.get(uid, {}),
             )
         )
     out.sort(key=lambda r: (-r.assigned, (r.name or r.email or "").lower()))

@@ -39,6 +39,16 @@ export function hasIssue(item: Pick<ReviewItem, 'issues'>): boolean {
   return Array.isArray(item.issues) && item.issues.length > 0;
 }
 
+/**
+ * Text as shown on screen, the same clean-up BDRC's API applies to full texts
+ * (`normalize_text`): drop the `_` word-boundary markers some TEI sources carry, and
+ * show runs of blank lines (OCR page breaks, empty scan areas) as at most one empty
+ * line. Display only: the stored text is unchanged.
+ */
+export function displayText(text: string): string {
+  return text.replace(/_/g, '').replace(/\n[ \t\u00a0]*(?:\n[ \t\u00a0]*)+\n/g, '\n\n');
+}
+
 export const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v * 100)}%`);
 
 /** One-line reading of the jaccard for reviewers; the raw `evidence.why` stays in the details. */
@@ -78,6 +88,36 @@ export const RESOLUTION_LABEL: Record<string, string> = {
 export function answerLabel(verdict: string | null | undefined): string {
   if (!verdict) return '—';
   return verdict === 'not_sure' ? "Can't answer" : verdictLabel(verdict);
+}
+
+// Answers grouped like the answer buttons: "Contains / part of" covers its dialog's
+// three choices. `text`/`bar` are the group's colours as text and as a bar segment.
+export const ANSWER_GROUPS = [
+  { label: 'Same', keys: ['same'], badge: 'bg-green-50 text-green-700', text: 'text-green-700', bar: 'bg-green-500' },
+  { label: 'Different', keys: ['different'], badge: 'bg-red-50 text-red-700', text: 'text-red-700', bar: 'bg-red-500' },
+  {
+    label: 'Contains / part of',
+    keys: ['contains', 'part_of', 'source_dup'],
+    badge: 'bg-gray-100 text-gray-700',
+    text: 'text-gray-600',
+    bar: 'bg-gray-400',
+  },
+  { label: "Can't answer", keys: ['not_sure'], badge: 'bg-amber-50 text-amber-800', text: 'text-amber-700', bar: 'bg-amber-400' },
+] as const;
+
+const ANSWER_DETAIL: Record<string, string> = {
+  contains: 'A contains B',
+  part_of: 'B contains A',
+  source_dup: 'Same source entered twice',
+};
+
+/** Per-group counts of a person's answers, plus a hover text with the exact split. */
+export function answerGroups(answers: Record<string, number>) {
+  return ANSWER_GROUPS.map((g) => ({
+    ...g,
+    n: g.keys.reduce((s, k) => s + (answers[k] ?? 0), 0),
+    detail: g.keys.length > 1 ? g.keys.map((k) => `${ANSWER_DETAIL[k] ?? k}: ${answers[k] ?? 0}`).join(' · ') : undefined,
+  }));
 }
 
 export const ISSUE_LABEL: Record<string, string> = {

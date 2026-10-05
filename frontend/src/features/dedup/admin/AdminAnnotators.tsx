@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import type { Annotator } from '../api/review';
 import { useAnnotators } from '../hooks/useReview';
-import { formatDateTime, formatDuration } from '../utils';
+import { ANSWER_GROUPS, answerGroups, formatDateTime, formatDuration } from '../utils';
 import InfoTip from './InfoTip';
 
 export default function AdminAnnotators() {
@@ -12,8 +12,23 @@ export default function AdminAnnotators() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-semibold text-gray-900">Annotators</h1>
-      <p className="mt-1 text-sm text-gray-600">Open a person to see their pairs or move unfinished ones.</p>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Annotators</h1>
+          <p className="mt-1 text-sm text-gray-600">Open a person to see their pairs or move unfinished ones.</p>
+        </div>
+        {/* What the colours in "Answered" mean: always in sight, since hover does not work on phones. */}
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600" aria-label="Answer colours">
+          {ANSWER_GROUPS.map((g) => (
+            <li key={g.label} className="inline-flex items-center gap-1.5">
+              <span className={`h-2.5 w-2.5 rounded-full ${g.bar}`} /> {g.label}
+            </li>
+          ))}
+          <li className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-gray-200" /> Not answered yet
+          </li>
+        </ul>
+      </div>
 
       {annotators.error && (
         <div className="mt-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -55,12 +70,18 @@ export default function AdminAnnotators() {
 
       {/* Laptops and up */}
       {annotators.data && annotators.data.length > 0 && (
-        <div className="mt-6 hidden rounded-lg border border-gray-200 bg-white shadow-sm lg:block">
+        <div className="mt-6 hidden overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm lg:block">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
                 <th className="rounded-tl-lg px-4 py-3 font-medium">Annotator</th>
-                <th className="px-3 py-3 font-medium">Answered</th>
+                <th className="px-3 py-3 font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    Answered
+                    <InfoTip text="Pairs answered out of those given, and how many with each option (their own latest answer per pair; a changed answer counts once)." />
+                  </span>
+                </th>
+
                 <th className="px-3 py-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
                     Opened <InfoTip text="Opened but not answered yet." />
@@ -93,7 +114,7 @@ export default function AdminAnnotators() {
                   </span>
                 </th>
                 <th className="px-3 py-3 font-medium">Last active</th>
-                <th className="rounded-tr-lg px-4 py-3" />
+                <th className="w-8 rounded-tr-lg px-3 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -113,11 +134,11 @@ export default function AdminAnnotators() {
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatDuration(a.avg_active_seconds)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{agreement(a)}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.adjudicated || '—'}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">{formatDateTime(a.last_active)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-blue-700">
-                      View <ArrowRight className="h-3.5 w-3.5" />
-                    </span>
+                  <td className="px-3 py-3 text-xs text-gray-500">
+                    <LastActive iso={a.last_active} />
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <ArrowRight className="ml-auto h-4 w-4 text-blue-700" aria-label={`Open ${a.name || a.email}`} />
                   </td>
                 </tr>
               ))}
@@ -129,22 +150,53 @@ export default function AdminAnnotators() {
   );
 }
 
+/** Date on one line, time on the next, so the column stays narrow. */
+function LastActive({ iso }: Readonly<{ iso: string | null }>) {
+  if (!iso) return <>—</>;
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`);
+  return (
+    <span title={formatDateTime(iso)} className="whitespace-nowrap">
+      {d.toLocaleDateString(undefined, { dateStyle: 'medium' })}
+      <br />
+      {d.toLocaleTimeString(undefined, { timeStyle: 'short' })}
+    </span>
+  );
+}
+
 /** "8 of 10 (80%)", or "—" before any pair has both answers. */
 function agreement(a: Annotator): string {
   if (!a.paired) return '—';
   return `${a.agreed} of ${a.paired} (${Math.round((a.agreed / a.paired) * 100)}%)`;
 }
 
+// Answered out of given, as one bar split by answer (same, different, …); the light
+// rest is not answered yet. One line below names the counts in the same colours.
 function Progress({ a }: Readonly<{ a: Annotator }>) {
-  const pct = a.assigned ? (a.done / a.assigned) * 100 : 0;
+  const groups = answerGroups(a.answers).filter((g) => g.n > 0);
+  const total = Math.max(a.assigned, groups.reduce((s, g) => s + g.n, 0));
+  const hover = groups.map((g) => `${g.label}: ${g.n}${g.detail ? ` (${g.detail})` : ''}`).join('\n');
   return (
-    <div>
+    <div title={hover || undefined}>
       <div className="text-sm text-gray-700">
         <strong className="tabular-nums text-gray-900">{a.done}</strong> of <span className="tabular-nums">{a.assigned}</span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
-        <span className="block h-full rounded-full bg-green-500" style={{ width: `${pct}%` }} />
+      <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+        {groups.map((g) => (
+          <span key={g.label} className={`h-full ${g.bar}`} style={{ width: `${(g.n / (total || 1)) * 100}%` }} />
+        ))}
       </div>
+      {groups.length > 0 && (
+        // Colour + dot per number; names are in the legend above the table and on hover.
+        <div className="mt-1 flex flex-wrap gap-x-2.5 text-xs">
+          {groups.map((g) => (
+            <span key={g.label} className={`inline-flex items-center gap-1 ${g.text}`}>
+              <span className={`h-2 w-2 rounded-full ${g.bar}`} aria-hidden="true" />
+              <span className="tabular-nums font-medium">{g.n}</span>
+              <span className="sr-only">{g.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

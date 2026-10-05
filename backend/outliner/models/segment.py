@@ -59,7 +59,8 @@ class OutlinerSegment(Base):
         nullable=True,
         index=True,
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Indexed: spot checks look up recently reviewed documents by it.
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     is_annotated: Mapped[bool] = mapped_column(default=False)
     comment: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

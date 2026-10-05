@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { WitnessCard } from '../api/review';
 import { useFullText } from '../hooks/useReview';
+import { displayText } from '../utils';
 import { WitnessMeta } from './SourceBadge';
 
 // The item only carries `head` / `tail` (~220 characters each); the full text is
@@ -53,14 +54,14 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
           )}
           {full.data && (
             <div className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap break-words pr-2 font-monlam text-lg leading-loose sm:text-xl text-gray-900">
-              {full.data.text_bo}
+              {displayText(full.data.text_bo)}
             </div>
           )}
         </div>
       ) : (
         <div className="whitespace-pre-wrap break-words px-4 py-4 font-monlam text-lg leading-loose text-gray-900 sm:px-5 sm:py-5 sm:text-xl">
           <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">Opening</div>
-          {head || <span className="font-sans text-sm italic text-gray-400">no text returned</span>}
+          {displayText(head) || <span className="font-sans text-sm italic text-gray-400">no text returned</span>}
 
           {unseen > 0 && (
             <div className="my-4 flex items-center gap-3 font-sans">
@@ -76,7 +77,7 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
           {tail && (
             <>
               <div className="mb-1 font-sans text-[11px] uppercase tracking-wide text-gray-400">Ending</div>
-              {tail}
+              {displayText(tail)}
             </>
           )}
         </div>

@@ -253,8 +253,13 @@ export interface FullText {
 export type DiffGranularity = 'syllable' | 'char' | 'line';
 
 // Compact chunks, led by an op: [0, text] same in both, [1, a, b] replaced,
-// [2, text] only in A, [3, text] only in B.
-export type DiffChunk = [0, string] | [1, string, string] | [2, string] | [3, string];
+// [2, text] only in A, [3, text] only in B. A changed chunk may end with a difference
+// type (decoded by TextDiff.types, e.g. 1 = punctuation only).
+export type DiffChunk =
+  | [0, string]
+  | [1, string, string, number?]
+  | [2, string, number?]
+  | [3, string, number?];
 
 export interface TextDiff {
   a: { mw_id: string; title_bo: string | null; image_url: string | null };
@@ -262,6 +267,8 @@ export interface TextDiff {
   granularity: DiffGranularity;
   // 0..1
   ratio: number;
+  // Difference-type legend, e.g. {"0": "none", "1": "punctuation"}.
+  types?: Record<string, string>;
   diff: DiffChunk[];
 }
 
@@ -333,6 +340,8 @@ export interface Annotator extends WorkCounts {
   agreed: number;
   // Pairs this person settled as adjudicator.
   adjudicated: number;
+  // Their own current answer per pair, counted by verdict (same, different, contains, …).
+  answers: Record<string, number>;
 }
 
 export interface AdminAdjudication {

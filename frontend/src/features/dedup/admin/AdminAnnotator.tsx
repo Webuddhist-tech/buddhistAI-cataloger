@@ -13,8 +13,9 @@ import {
 } from '@/components/ui/dialog';
 import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdminOverview, useAnnotatorItems, useAnnotators, useReassign } from '../hooks/useReview';
-import { batchNames, hasIssue, isDecided, verdictLabel } from '../utils';
+import { answerLabel, batchNames, hasIssue, isDecided } from '../utils';
 import { Person } from './AdminAnnotators';
+import AnswerCounts from './AnswerCounts';
 import InfoTip from './InfoTip';
 
 const TABS: { key: MyItemsState; label: string }[] = [
@@ -114,6 +115,14 @@ export default function AdminAnnotator() {
           </div>
         )}
       </div>
+      {person && person.done > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600">
+          <span className="inline-flex items-center gap-1">
+            Answers <InfoTip text="Their own latest answer per pair, counted by option." />
+          </span>
+          <AnswerCounts a={person} all />
+        </div>
+      )}
 
       <div className="mt-5 mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
@@ -354,11 +363,22 @@ export default function AdminAnnotator() {
   );
 }
 
+// Same colours as the answer buttons and the answer counts.
+const VERDICT_STYLE: Record<string, string> = {
+  same: 'bg-green-50 text-green-700',
+  different: 'bg-red-50 text-red-700',
+  not_sure: 'bg-amber-50 text-amber-800',
+};
+
 function ItemStatus({ item }: Readonly<{ item: ReviewItem }>) {
   if (isDecided(item)) {
     return (
-      <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-        {verdictLabel(item.verdict!)}
+      <span
+        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+          VERDICT_STYLE[item.verdict!] ?? 'bg-gray-100 text-gray-700'
+        }`}
+      >
+        {answerLabel(item.verdict)}
         {hasIssue(item) && ' · problem reported'}
       </span>
     );
