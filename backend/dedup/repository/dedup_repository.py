@@ -481,15 +481,18 @@ def sync_health(db: Session, limit: int = 50) -> dict[str, Any]:
 # --- admin -----------------------------------------------------------------------
 
 def assignment_counts_by_batch(db: Session) -> dict[str, dict[str, int]]:
-    """``{batch_id: {"assigned": n, "done": n}}`` across all annotators."""
+    """``{batch_id: {"assigned": n, "done": n, "pairs": n}}`` across all annotators:
+    annotator slots handed out and answered, and distinct pairs handed out (a pair has
+    two slots in double review)."""
     rows = db.execute(
         select(
             DedupAssignment.batch_id,
             func.count(),
             func.count().filter(DedupAssignment.completed_at.is_not(None)),
+            func.count(func.distinct(DedupAssignment.item_id)),
         ).group_by(DedupAssignment.batch_id)
     ).all()
-    return {b: {"assigned": n, "done": d} for b, n, d in rows}
+    return {b: {"assigned": n, "done": d, "pairs": p} for b, n, d, p in rows}
 
 
 def latest_decision_per_item(db: Session) -> list[DedupDecision]:

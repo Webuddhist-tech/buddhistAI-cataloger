@@ -297,6 +297,8 @@ export interface AdminBatch {
   status_counts: Record<string, number>;
   assigned: number;
   assigned_done: number;
+  // Distinct pairs handed out to at least one annotator.
+  pairs_handed_out: number;
 }
 
 export interface SyncHealth {

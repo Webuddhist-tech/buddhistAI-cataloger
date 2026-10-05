@@ -200,9 +200,11 @@ class AdminBatchOut(BaseModel):
     created_at: Optional[datetime] = None
     # BDRC's counts for the whole batch, by status.
     status_counts: dict[str, int] = Field(default_factory=dict)
-    # Handed out in the Cataloger, and how many of those are done.
+    # Handed out in the Cataloger, and how many of those are done (annotator slots).
     assigned: int = 0
     assigned_done: int = 0
+    # Distinct pairs handed out to at least one annotator.
+    pairs_handed_out: int = 0
 
 
 class DoubleReviewCounts(BaseModel):

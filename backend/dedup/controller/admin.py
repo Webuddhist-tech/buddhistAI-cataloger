@@ -72,6 +72,7 @@ def overview(db: Session) -> AdminOverviewOut:
                 status_counts=stats.get(b["batch_id"], {}),
                 assigned=ours.get(b["batch_id"], {}).get("assigned", 0),
                 assigned_done=ours.get(b["batch_id"], {}).get("done", 0),
+                pairs_handed_out=ours.get(b["batch_id"], {}).get("pairs", 0),
             )
             for b in sorted(batches, key=lambda b: (b.get("created_at") or "", b["batch_id"]))
         ],

@@ -1,27 +1,18 @@
-import { useMemo, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, CircleDashed, Gavel, Hourglass, Inbox, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { AdminBatch, DoubleReviewCounts, ReviewMode, SyncHealth } from '../api/review';
 import { useAdminOverview, useDedupSettings, useUpdateReviewMode } from '../hooks/useReview';
-import { abstentionLabel, batchNames, formatDateTime, formatNumber, issueLabel, resolutionLabel, verdictLabel } from '../utils';
+import { abstentionLabel, formatDateTime, formatNumber, issueLabel, resolutionLabel, verdictLabel } from '../utils';
 import InfoTip from './InfoTip';
 
-// BDRC statuses in the batch bars. Anything else BDRC reports is grouped as "other".
-const BDRC_STATUS = [
-  { key: 'finalized', bar: 'bg-green-500', dot: 'bg-green-500' },
-  // Older answers that reported a problem without a verdict; new answers are always finalized.
-  { key: 'flagged', bar: 'bg-amber-400', dot: 'bg-amber-400' },
-  { key: 'other', bar: 'bg-sky-400', dot: 'bg-sky-400' },
-  { key: 'new', bar: 'bg-gray-200', dot: 'bg-gray-300' },
-] as const;
 
 export default function AdminOverview() {
   const { t } = useTranslation();
   const overview = useAdminOverview();
   const o = overview.data;
-  const names = useMemo(() => batchNames(o?.batches ?? []), [o?.batches]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -52,13 +43,16 @@ export default function AdminOverview() {
 
           <DoubleReview d={o.double_review} />
 
-          <Section title={t('dedup.admin.overview.section.batches')} tip={t('dedup.admin.overview.section.batchesTip')}>
-            <div className="space-y-4">
-              {o.batches.map((b) => (
-                <BatchCard key={b.batch_id} batch={b} name={names[b.batch_id] ?? b.batch_id} />
-              ))}
-              {o.batches.length === 0 && <p className="text-sm text-gray-500">{t('dedup.admin.overview.noBatches')}</p>}
-            </div>
+          <Section
+            eyebrow={t('dedup.admin.overview.section.batchesEyebrow')}
+            title={t('dedup.admin.overview.section.batches')}
+            tip={t('dedup.admin.overview.section.batchesTip')}
+          >
+            {o.batches.length === 0 ? (
+              <p className="text-sm text-gray-500">{t('dedup.admin.overview.noBatches')}</p>
+            ) : (
+              <BatchTable batches={o.batches} />
+            )}
           </Section>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -232,60 +226,81 @@ function SyncLine({ sync }: Readonly<{ sync: SyncHealth }>) {
   return null;
 }
 
-function BatchCard({ batch, name }: Readonly<{ batch: AdminBatch; name: string }>) {
+// Like the Outliner's "Available Batches": per batch, how many pairs are left to hand out,
+// being worked on, and done. Total and Done come from BDRC; BDRC does not know which
+// pairs were handed out, so Available and In progress use the Cataloger's assignments.
+function batchRow(b: AdminBatch) {
+  const total = b.n_items;
+  const done = b.status_counts.finalized ?? 0;
+  const available = Math.max(0, total - b.pairs_handed_out);
+  const inProgress = Math.max(0, total - available - done);
+  return { total, available, inProgress, done };
+}
+
+function BatchTable({ batches }: Readonly<{ batches: AdminBatch[] }>) {
   const { t } = useTranslation();
-  const known = new Set(['finalized', 'flagged', 'new']);
-  const counts: Record<string, number> = {
-    finalized: batch.status_counts.finalized ?? 0,
-    flagged: batch.status_counts.flagged ?? 0,
-    new: batch.status_counts.new ?? 0,
-    other: Object.entries(batch.status_counts)
-      .filter(([k]) => !known.has(k))
-      .reduce((a, [, n]) => a + n, 0),
-  };
-  const total = batch.n_items || Object.values(counts).reduce((a, n) => a + n, 0);
-  const pct = (n: number) => (total ? (n / total) * 100 : 0);
-
+  // Oldest first: the order "Assign me work" hands batches out in.
+  const rows = [...batches]
+    .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '') || a.batch_id.localeCompare(b.batch_id))
+    .map((b, i) => ({ b, n: i + 1, ...batchRow(b) }));
+  const sum = (k: 'total' | 'available' | 'inProgress' | 'done') => rows.reduce((n, r) => n + r[k], 0);
+  const cols: { key: 'total' | 'available' | 'inProgress' | 'done'; tone?: string }[] = [
+    { key: 'total' },
+    { key: 'available', tone: 'text-blue-700' },
+    { key: 'inProgress', tone: 'text-amber-700' },
+    { key: 'done', tone: 'text-green-700' },
+  ];
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <span className="font-medium text-gray-900" title={batch.batch_id}>{name}</span>
-          <span className="ml-2 text-sm text-gray-500">{t('dedup.adjudicationQueue.pairCount', { count: total, n: formatNumber(total) })}</span>
-        </div>
-        {batch.created_at && (
-          <span className="text-xs text-gray-400">
-            {t('dedup.admin.batch.added', { date: new Date(batch.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' }) })}
-          </span>
+    <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <table className="w-full min-w-[560px] text-sm">
+        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th className="px-4 py-3 font-medium">{t('dedup.admin.batch.table.batch')}</th>
+            {cols.map((c) => (
+              <th key={c.key} className="px-4 py-3 text-right font-medium">
+                <span className="inline-flex items-center gap-1">
+                  {t(`dedup.admin.batch.table.${c.key}`)}
+                  <InfoTip text={t(`dedup.admin.batch.table.${c.key}Tip`)} />
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r) => (
+            <tr key={r.b.batch_id}>
+              <td className="px-4 py-3">
+                {/* Numbered like the Outliner's batches; the full id on hover. */}
+                <span className="font-medium text-gray-900 tabular-nums" title={r.b.batch_id}>
+                  {formatNumber(r.n)}
+                </span>
+              </td>
+              {cols.map((c) => (
+                <td key={c.key} className={`px-4 py-3 text-right tabular-nums ${r[c.key] ? c.tone ?? 'text-gray-900' : 'text-gray-400'}`}>
+                  {formatNumber(r[c.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        {rows.length > 1 && (
+          <tfoot className="border-t border-gray-200 bg-gray-50 font-medium">
+            <tr>
+              <td className="px-4 py-3 text-gray-700">{t('dedup.admin.batch.table.allBatches')}</td>
+              {cols.map((c) => (
+                <td key={c.key} className="px-4 py-3 text-right tabular-nums text-gray-900">
+                  {formatNumber(sum(c.key))}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
         )}
-      </div>
-
-      <div className="mt-3 flex items-center gap-1 text-xs text-gray-500">
-        {t('dedup.admin.batch.statusInBdrc')}
-        <InfoTip text={t('dedup.admin.batch.statusInBdrcTip')} />
-      </div>
-      <div className="mt-1.5 flex h-3 overflow-hidden rounded-full bg-gray-100" aria-label={t('dedup.admin.batch.statusInBdrc')}>
-        {BDRC_STATUS.map((s) =>
-          counts[s.key] ? <span key={s.key} className={`h-full ${s.bar}`} style={{ width: `${pct(counts[s.key])}%` }} /> : null,
-        )}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
-        {BDRC_STATUS.filter((s) => s.key !== 'other' || counts.other > 0).map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-full ${s.dot}`} />
-            {t(`dedup.admin.batch.bdrcStatus.${s.key}`)}{' '}
-            <strong className="tabular-nums text-gray-900">{formatNumber(counts[s.key])}</strong>
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-600">
-        <span>
-          {t('dedup.admin.batch.given', { n: formatNumber(batch.assigned), total: formatNumber(total) })}
-          {batch.assigned > 0 && <> · {t('dedup.admin.batch.answered', { n: formatNumber(batch.assigned_done) })}</>}
-        </span>
-        <InfoTip text={t('dedup.admin.batch.givenTip')} />
-      </div>
+      </table>
+      {sum('available') === 0 && (
+        <p className="border-t border-gray-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {t('dedup.admin.batch.table.noneLeft')}
+        </p>
+      )}
     </div>
   );
 }
@@ -311,14 +326,17 @@ function Stat({ icon, label, value, tone, tip }: Readonly<{
   );
 }
 
-function Section({ title, tip, children, className = 'mt-6' }: Readonly<{
+// `eyebrow`: small heading above the title, as on the Outliner overview ("BEC Volume Batches").
+function Section({ title, tip, eyebrow, children, className = 'mt-6' }: Readonly<{
   title: string;
   tip?: string;
+  eyebrow?: string;
   children: ReactNode;
   className?: string;
 }>) {
   return (
     <section className={`${className} rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5`}>
+      {eyebrow && <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-red-700">{eyebrow}</div>}
       <h2 className="mb-3 flex items-center gap-1 text-sm font-semibold text-gray-900">
         {title}
         {tip && <InfoTip text={tip} />}

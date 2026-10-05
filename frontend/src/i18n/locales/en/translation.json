@@ -1128,14 +1128,15 @@
           "adjudicatedTip": "Settled by an adjudicator and sent to BDRC."
         },
         "section": {
-          "batches": "Batches",
-          "batchesTip": "Batches of pairs prepared by BDRC. New batches appear here automatically.",
+          "batches": "Available batches",
+          "batchesTip": "Each batch of pairs from BEC, oldest first. New batches appear here automatically.",
           "finalAnswers": "Final answers",
           "finalAnswersTip": "The answer BDRC has for each settled pair: the one both annotators agreed on, or the adjudicator's.",
           "couldntAnswer": "Couldn't answer",
           "couldntAnswerTip": "When annotators chose “Can't answer”, the reason they gave.",
           "dataProblems": "Data problems reported",
-          "dataProblemsTip": "Problems with the texts themselves, reported for fixing later."
+          "dataProblemsTip": "Problems with the texts themselves, reported for fixing later.",
+          "batchesEyebrow": "BEC pair batches"
         },
         "noBatches": "No batches yet.",
         "noAnswers": "No answers yet.",
@@ -1156,18 +1157,23 @@
         "failedHelp": "The answers are saved here. Please send these pair numbers to a developer:"
       },
       "batch": {
-        "added": "Added {{date}}",
-        "statusInBdrc": "Status in BDRC",
-        "statusInBdrcTip": "Live from BDRC: every pair of the batch, whoever answered it.",
         "bdrcStatus": {
-          "finalized": "Answered",
-          "flagged": "Problem, no answer yet",
-          "other": "Other",
           "new": "Not answered yet"
         },
-        "given": "Given to annotators: {{n}} of {{total}}",
         "answered": "{{n}} answered",
-        "givenTip": "From the Cataloger: how many pairs of this batch annotators have taken so far, and how many of those they answered."
+        "table": {
+          "batch": "Batch",
+          "total": "Total",
+          "totalTip": "Pairs in this batch.",
+          "available": "Available",
+          "availableTip": "Not handed out to anyone yet. These are the next pairs “Assign me work” gives.",
+          "inProgress": "In progress",
+          "inProgressTip": "Handed out but not finished yet, including pairs waiting for a second annotator or an adjudicator.",
+          "done": "Done",
+          "doneTip": "Finished: the final answer has been saved.",
+          "allBatches": "All batches",
+          "noneLeft": "All pairs have been handed out. New work will appear here when the next batch is added."
+        }
       },
       "mode": {
         "single": {
