@@ -916,9 +916,24 @@ def get_annotator_weekly_quality(
     if end_date is not None:
         approved_clauses.append(seg_time <= end_date)
 
-    edited_when = or_(
-        OutlinerSegment.reviewer_title.isnot(None),
-        OutlinerSegment.reviewer_author.isnot(None),
+    # Counted on the same segments as the denominator: of the segments reviewed this week, how
+    # many were rejected at some point. Bucketing rejections by their own filing date instead
+    # divides two unrelated sets of segments and can exceed 100%.
+    was_rejected = (
+        db.query(SegmentRejection.segment_id)
+        .filter(SegmentRejection.segment_id == OutlinerSegment.id)
+        .exists()
+    )
+    # A rejected segment may also carry a reviewer correction. Count it once, under the more
+    # serious outcome, so clean + edited + rejected == approved. Decided per segment: most
+    # rejected segments carry no correction, so subtracting the rejected total from the edited
+    # total afterwards undercounts corrections.
+    edited_when = and_(
+        or_(
+            OutlinerSegment.reviewer_title.isnot(None),
+            OutlinerSegment.reviewer_author.isnot(None),
+        ),
+        ~was_rejected,
     )
     approved_rows = (
         db.query(
@@ -933,14 +948,6 @@ def get_annotator_weekly_quality(
         .all()
     )
 
-    # Counted on the same segments as the denominator: of the segments reviewed this week, how
-    # many were rejected at some point. Bucketing rejections by their own filing date instead
-    # divides two unrelated sets of segments and can exceed 100%.
-    was_rejected = (
-        db.query(SegmentRejection.segment_id)
-        .filter(SegmentRejection.segment_id == OutlinerSegment.id)
-        .exists()
-    )
     rejected_rows = (
         db.query(
             OutlinerDocument.user_id,
@@ -982,9 +989,7 @@ def get_annotator_weekly_quality(
     for row in buckets.values():
         approved = row["approved"]
         rejected = row["rejected"]
-        # A rejected segment may also carry a reviewer correction. Count it once, under the
-        # more serious outcome, so clean + edited + rejected == approved.
-        edited_only = max(row["edited"] - rejected, 0)
+        edited_only = row["edited"]
         clean = max(approved - rejected - edited_only, 0)
         rows.append(
             {
