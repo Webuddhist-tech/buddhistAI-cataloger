@@ -15,7 +15,12 @@ engine = create_engine(
     pool_size=10,  # Connection pool size
     max_overflow=20,  # Max overflow connections
     # Fail fast when the DB is unreachable instead of hanging request threads forever
-    connect_args={"connect_timeout": 10},
+    # No parallel query workers: each is an extra Postgres process, and the 1 GB RDS instance
+    # ran out of memory under heavy stats queries.
+    connect_args={
+        "connect_timeout": 10,
+        "options": "-c max_parallel_workers_per_gather=0",
+    },
 )
 SessionLocal = sessionmaker[Session](
     bind=engine,

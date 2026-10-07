@@ -17,7 +17,8 @@ class OutlinerDocument(Base):
     __tablename__ = "outliner_documents"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Heavy columns (~500 KB per volume) load only when read, so metadata-only queries stay small.
+    content: Mapped[str] = mapped_column(Text, nullable=False, deferred=True)
     filename: Mapped[str | None] = mapped_column(String, nullable=True)
     user_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, index=True
@@ -31,8 +32,10 @@ class OutlinerDocument(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
     status: Mapped[str | None] = mapped_column(String, default="active", nullable=True)
-    ai_toc_entries: Mapped[Any | None] = mapped_column(JSON, nullable=True)
-    annotator_ai_final_segments: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    ai_toc_entries: Mapped[Any | None] = mapped_column(JSON, nullable=True, deferred=True)
+    annotator_ai_final_segments: Mapped[Any | None] = mapped_column(
+        JSON, nullable=True, deferred=True
+    )
     submit_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
     segments: Mapped[list["OutlinerSegment"]] = relationship(
         "OutlinerSegment",

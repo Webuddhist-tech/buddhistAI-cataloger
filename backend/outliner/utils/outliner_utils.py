@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy import func
 from core.redis import (
     get_document_content_from_cache,
@@ -78,7 +79,9 @@ def get_document_with_cache(db: Session, document_id: str) -> Optional[OutlinerD
             .first()
         )
         if document:
-            document.content = cached_content
+            # Populate as already-loaded, not as an edit: a plain assignment marks the row dirty
+            # and the request's commit rewrites the whole volume text back to the DB.
+            set_committed_value(document, "content", cached_content)
         return document
     # Content not in cache: load row once (includes content) and warm cache
     document = db.query(OutlinerDocument).filter(OutlinerDocument.id == document_id).first()
