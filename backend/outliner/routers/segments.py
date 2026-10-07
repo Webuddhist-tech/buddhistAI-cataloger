@@ -64,7 +64,7 @@ router = APIRouter()
 
 
 @router.get("/segments/{segment_id}", response_model=SegmentResponse)
-async def get_segment(
+def get_segment(
     segment_id: str,
     db: Session = Depends(get_db),
 ):
@@ -81,7 +81,7 @@ async def get_segment(
     "/segments/{segment_id}/rejections",
     response_model=SegmentRejectionHistoryResponse,
 )
-async def list_segment_rejections(
+def list_segment_rejections(
     segment_id: str,
     db: Session = Depends(get_db),
     _current_user: User = Depends(require_outliner_access),
@@ -94,7 +94,7 @@ async def list_segment_rejections(
 
 
 @router.put("/segments/{segment_id}", status_code=201)
-async def update_segment(
+def update_segment(
     segment_id: str,
     segment_update: SegmentUpdate,
     db: Session = Depends(get_db),
@@ -129,7 +129,7 @@ async def update_segment(
 
 
 @router.put("/segments/bulk", response_model=List[SegmentResponse])
-async def update_segments_bulk(
+def update_segments_bulk(
     updates: BulkSegmentUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
@@ -163,7 +163,7 @@ async def update_segments_bulk(
 
 
 @router.post("/segments/{segment_id}/split")
-async def split_segment(
+def split_segment(
     segment_id: str,
     split_request: SplitSegmentRequest,
     db: Session = Depends(get_db),
@@ -180,7 +180,7 @@ async def split_segment(
 
 
 @router.post("/segments/merge", response_model=SegmentResponse)
-async def merge_segments(
+def merge_segments(
     merge_request: MergeSegmentsRequest,
     db: Session = Depends(get_db),
 ):
@@ -194,7 +194,7 @@ async def merge_segments(
 
 
 @router.delete("/segments/{segment_id}", status_code=204)
-async def delete_segment(
+def delete_segment(
     segment_id: str,
     db: Session = Depends(get_db),
 ):
@@ -204,7 +204,7 @@ async def delete_segment(
 
 
 @router.get("/segments/{segment_id}/comment", response_model=List[CommentResponse])
-async def get_segment_comments(
+def get_segment_comments(
     segment_id: str,
     db: Session = Depends(get_db),
 ):
@@ -214,7 +214,7 @@ async def get_segment_comments(
 
 
 @router.post("/segments/{segment_id}/comment", response_model=List[CommentResponse])
-async def add_segment_comment(
+def add_segment_comment(
     segment_id: str,
     comment: CommentAdd,
     db: Session = Depends(get_db),
@@ -230,7 +230,7 @@ async def add_segment_comment(
 
 
 @router.put("/segments/{segment_id}/comment/{comment_index}", response_model=List[CommentResponse])
-async def update_segment_comment(
+def update_segment_comment(
     segment_id: str,
     comment_index: int,
     comment_update: CommentUpdate,
@@ -247,7 +247,7 @@ async def update_segment_comment(
 
 
 @router.delete("/segments/{segment_id}/comment/{comment_index}", response_model=List[CommentResponse])
-async def delete_segment_comment(
+def delete_segment_comment(
     segment_id: str,
     comment_index: int,
     db: Session = Depends(get_db),
@@ -262,7 +262,7 @@ async def delete_segment_comment(
 
 
 @router.put("/segments/{segment_id}/status")
-async def update_segment_status(
+def update_segment_status(
     segment_id: str,
     status_update: SegmentStatusUpdate,
     db: Session = Depends(get_db),
@@ -292,7 +292,7 @@ async def update_segment_status(
 
 
 @router.put("/segments/{segment_id}/reject", response_model=SegmentResponse)
-async def reject_segment(
+def reject_segment(
     segment_id: str,
     body: RejectSegmentRequest,
     db: Session = Depends(get_db),
@@ -321,7 +321,7 @@ async def reject_segment(
     response_model=SegmentReviewResponse,
     status_code=201,
 )
-async def submit_segment_review(
+def submit_segment_review(
     segment_id: str,
     body: SegmentReviewRequest,
     db: Session = Depends(get_db),
@@ -334,7 +334,7 @@ async def submit_segment_review(
 
 
 @router.put("/segments/bulk-reject", response_model=List[SegmentResponse])
-async def reject_segments_bulk(
+def reject_segments_bulk(
     request: BulkRejectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),

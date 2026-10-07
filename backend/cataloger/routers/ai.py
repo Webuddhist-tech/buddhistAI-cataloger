@@ -65,7 +65,7 @@ class SegmentCreationResponse(BaseModel):
 
 
 @router.post("/generate-title-author", response_model=TitleAuthorResponse)
-async def generate_title_author_route(request: ContentRequest):
+def generate_title_author_route(request: ContentRequest):
     """
     Generate or extract title and author from text content.
     

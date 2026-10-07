@@ -38,7 +38,7 @@ class TenantMembershipResponse(BaseModel):
 
 
 @router.get("", response_model=List[TenantMembershipResponse])
-async def get_memberships(
+def get_memberships(
     skip: int = 0, 
     limit: int = 100, 
     user_id: Optional[str] = None,
@@ -59,7 +59,7 @@ async def get_memberships(
 
 
 @router.get("/{membership_id}", response_model=TenantMembershipResponse)
-async def get_membership(membership_id: str, db: Session = Depends(get_db)):
+def get_membership(membership_id: str, db: Session = Depends(get_db)):
     """Get a membership by ID"""
     membership = db.query(TenantMembership).filter(TenantMembership.id == membership_id).first()
     if not membership:
@@ -68,7 +68,7 @@ async def get_membership(membership_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=TenantMembershipResponse, status_code=201)
-async def create_membership(membership: TenantMembershipCreate, db: Session = Depends(get_db)):
+def create_membership(membership: TenantMembershipCreate, db: Session = Depends(get_db)):
     """Create a new membership"""
     # Verify user exists
     user = db.query(User).filter(User.id == membership.user_id).first()
@@ -103,7 +103,7 @@ async def create_membership(membership: TenantMembershipCreate, db: Session = De
 
 
 @router.put("/{membership_id}", response_model=TenantMembershipResponse)
-async def update_membership(membership_id: str, membership: TenantMembershipUpdate, db: Session = Depends(get_db)):
+def update_membership(membership_id: str, membership: TenantMembershipUpdate, db: Session = Depends(get_db)):
     """Update a membership"""
     db_membership = db.query(TenantMembership).filter(TenantMembership.id == membership_id).first()
     if not db_membership:
@@ -140,7 +140,7 @@ async def update_membership(membership_id: str, membership: TenantMembershipUpda
 
 
 @router.delete("/{membership_id}", status_code=204)
-async def delete_membership(membership_id: str, db: Session = Depends(get_db)):
+def delete_membership(membership_id: str, db: Session = Depends(get_db)):
     """Delete a membership"""
     db_membership = db.query(TenantMembership).filter(TenantMembership.id == membership_id).first()
     if not db_membership:

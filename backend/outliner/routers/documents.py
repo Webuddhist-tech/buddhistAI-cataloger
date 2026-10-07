@@ -76,7 +76,7 @@ router = APIRouter()
 
 
 @router.post("/documents", response_model=DocumentResponse, status_code=201)
-async def create_document(
+def create_document(
     document: DocumentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
@@ -92,7 +92,7 @@ async def create_document(
 
 
 @router.get("/documents", response_model=List[DocumentListResponse])
-async def list_documents(
+def list_documents(
     user_id: Optional[str] = None,
     reviewer_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -127,7 +127,7 @@ async def list_documents(
     "/documents/random-reviewed-ids",
     response_model=RandomReviewedDocumentIdsResponse,
 )
-async def random_reviewed_document_ids(db: Session = Depends(get_db)):
+def random_reviewed_document_ids(db: Session = Depends(get_db)):
     """Return up to five random approved documents, each with id and filename."""
     return random_reviewed_document_ids_ctrl(db, limit=5)
 
@@ -136,7 +136,7 @@ async def random_reviewed_document_ids(db: Session = Depends(get_db)):
     "/documents/my-reviewed-segments",
     response_model=MyReviewedSegmentsResponse,
 )
-async def my_reviewed_segments(
+def my_reviewed_segments(
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -149,7 +149,7 @@ async def my_reviewed_segments(
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
-async def get_document(
+def get_document(
     document_id: str,
     include_segments: bool = True,
     db: Session = Depends(get_db),
@@ -191,7 +191,7 @@ async def get_document(
     response_model=DocumentWorkspaceResponse,
     
 )
-async def get_document_workspace(
+def get_document_workspace(
     document_id: str,
     include_segments: bool = True,
     db: Session = Depends(get_db),
@@ -245,7 +245,7 @@ async def get_document_workspace(
     "/documents/{document_id}/ai-toc-entries",
     response_model=AiTocEntriesResponse,
 )
-async def get_document_ai_toc_entries(
+def get_document_ai_toc_entries(
     document_id: str,
     db: Session = Depends(get_db),
 ):
@@ -256,7 +256,7 @@ async def get_document_ai_toc_entries(
 
 
 @router.put("/documents/{document_id}/content")
-async def update_document_content(
+def update_document_content(
     document_id: str,
     content: str,
     db: Session = Depends(get_db),
@@ -266,7 +266,7 @@ async def update_document_content(
 
 
 @router.delete("/documents/{document_id}", status_code=204)
-async def delete_document(
+def delete_document(
     document_id: str,
     db: Session = Depends(get_db),
 ):
@@ -276,7 +276,7 @@ async def delete_document(
 
 
 @router.post("/documents/{document_id}/segments", response_model=SegmentResponse, status_code=201)
-async def create_segment(
+def create_segment(
     document_id: str,
     segment: SegmentCreate,
     db: Session = Depends(get_db),
@@ -303,7 +303,7 @@ async def create_segment(
 
 
 @router.post("/documents/{document_id}/segments/bulk", response_model=List[SegmentResponse], status_code=201)
-async def create_segments_bulk(
+def create_segments_bulk(
     document_id: str,
     segments: List[SegmentCreate],
     db: Session = Depends(get_db),
@@ -320,7 +320,7 @@ async def create_segments_bulk(
 
 
 @router.get("/documents/{document_id}/segments", response_model=List[SegmentResponse])
-async def list_segments(
+def list_segments(
     document_id: str,
     db: Session = Depends(get_db),
 ):
@@ -334,7 +334,7 @@ async def list_segments(
 
 
 @router.post("/documents/{document_id}/segments/bulk-operations", response_model=List[SegmentResponse])
-async def bulk_segment_operations(
+def bulk_segment_operations(
     document_id: str,
     operations: BulkSegmentOperationsRequest,
     db: Session = Depends(get_db),
@@ -379,7 +379,7 @@ async def bulk_segment_operations(
 
 
 @router.delete("/documents/{document_id}/segments/reset", status_code=204)
-async def reset_segments(
+def reset_segments(
     document_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
@@ -436,7 +436,7 @@ async def update_document_status(
         }
     },
 )
-async def update_document_assignee(
+def update_document_assignee(
     document_id: str,
     assignee_update: DocumentAssigneeUpdate,
     db: Session = Depends(get_db),
@@ -460,7 +460,7 @@ async def update_document_assignee(
 
 
 @router.get("/documents/{document_id}/progress")
-async def get_document_progress(
+def get_document_progress(
     document_id: str,
     db: Session = Depends(get_db),
 ):
@@ -469,7 +469,7 @@ async def get_document_progress(
 
 
 @router.get("/documents/{document_id}/segment-reviews", response_model=SegmentReviewsResponse)
-async def get_segment_reviews(
+def get_segment_reviews(
     document_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
@@ -546,7 +546,7 @@ async def approve_document(
 
 
 @router.post("/documents/assign_reviewr")
-async def assign_reviewr(
+def assign_reviewr(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
 ):
@@ -558,7 +558,7 @@ async def assign_reviewr(
 
 
 @router.post("/documents/{document_id}/assign-reviewer")
-async def assign_document_reviewer(
+def assign_document_reviewer(
     document_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),

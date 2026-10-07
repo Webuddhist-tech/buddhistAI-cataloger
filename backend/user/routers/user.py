@@ -77,7 +77,7 @@ class PaginatedUserResponse(BaseModel):
 
 
 @router.get("", response_model=PaginatedUserResponse)
-async def get_users(
+def get_users(
     skip: int = 0,
     limit: int = 100,
     role: Optional[str] = None,
@@ -141,7 +141,7 @@ async def get_users(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(
+def get_current_user(
     payload: dict = Depends(require_access_token_payload),
     db: Session = Depends(get_db),
 ):
@@ -185,7 +185,7 @@ async def get_current_user(
 
 
 @router.get("/by-email/{email}", response_model=UserResponse)
-async def get_user_by_email(email: str, db: Session = Depends(get_db)):
+def get_user_by_email(email: str, db: Session = Depends(get_db)):
     """Get a user by email (cached in Redis for 20 days when Redis is available)."""
     cached = get_user_by_email_from_cache(email)
     if cached is not None:
@@ -219,7 +219,7 @@ async def get_user_by_email(email: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str, db: Session = Depends(get_db)):
+def get_user(user_id: str, db: Session = Depends(get_db)):
     """Get a user by ID"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -248,7 +248,7 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=UserResponse, status_code=201)
-async def create_user(
+def create_user(
     user: UserSelfCreate,
     payload: dict = Depends(require_access_token_payload),
     db: Session = Depends(get_db),
@@ -312,7 +312,7 @@ async def create_user(
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: str, user: UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: str, user: UserUpdate, db: Session = Depends(get_db)):
     """Update a user"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
@@ -370,7 +370,7 @@ async def update_user(user_id: str, user: UserUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_user(user_id: str, db: Session = Depends(get_db)):
+def delete_user(user_id: str, db: Session = Depends(get_db)):
     """Delete a user"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:

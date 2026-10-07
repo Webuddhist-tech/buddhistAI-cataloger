@@ -120,7 +120,7 @@ class RelatedInstance(BaseModel):
 
 
 @router.get("/{text_id}/instances")
-async def get_text_instances(text_id: str):
+def get_text_instances(text_id: str):
     """Get all instances for a specific text"""
     response = requests.get(f"{API_ENDPOINT}/texts/{text_id}/instances")
     if response.status_code != 200:
@@ -130,7 +130,7 @@ async def get_text_instances(text_id: str):
 
 
 @router.post("/{instance_id}/translation", status_code=201)
-async def create_translation(instance_id: str, translation: CreateTranslation):
+def create_translation(instance_id: str, translation: CreateTranslation):
     """Create a translation for a specific instance"""
     if not API_ENDPOINT:
         raise HTTPException(
@@ -168,7 +168,7 @@ async def create_translation(instance_id: str, translation: CreateTranslation):
 
 
 @router.post("/{instance_id}/commentary", status_code=201)
-async def create_commentary(instance_id: str, commentary: CreateCommentary):
+def create_commentary(instance_id: str, commentary: CreateCommentary):
     """Create a commentary for a specific instance"""
     if not API_ENDPOINT:
         raise HTTPException(
@@ -205,7 +205,7 @@ async def create_commentary(instance_id: str, commentary: CreateCommentary):
 
 
 @router.get("/{instance_id}/related")
-async def get_related_instances(instance_id: str, type: Optional[str] = None):
+def get_related_instances(instance_id: str, type: Optional[str] = None):
     """Get all instances related to a specific instance
     
     Args:

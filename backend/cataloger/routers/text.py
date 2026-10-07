@@ -158,7 +158,7 @@ class CreateInstanceResponse(BaseModel):
 
 
 @router.get("")
-async def get_texts(
+def get_texts(
     limit: int = 30,
     offset: int = 0,
     language: Optional[str] = None,
@@ -204,7 +204,7 @@ async def get_texts(
         )
 
 @router.post("", status_code=201)
-async def create_text(text: CreateText):
+def create_text(text: CreateText):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -231,7 +231,7 @@ async def create_text(text: CreateText):
         )
 
 @router.get("/{id}", response_model=Text)
-async def get_text(id: str):
+def get_text(id: str):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -256,7 +256,7 @@ async def get_text(id: str):
 
 
 @router.put("/{id}")
-async def update_text(id: str, text: UpdateText):
+def update_text(id: str, text: UpdateText):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -280,7 +280,7 @@ async def update_text(id: str, text: UpdateText):
         )
 
 @router.get("/{id}/instances")
-async def get_instances(id: str):
+def get_instances(id: str):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -318,7 +318,7 @@ async def get_instances(id: str):
         )
 
 @router.post("/{id}/instances",  status_code=201)
-async def create_instance(id: str, instance: CreateInstance):
+def create_instance(id: str, instance: CreateInstance):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -351,7 +351,7 @@ async def create_instance(id: str, instance: CreateInstance):
 
 
 @router.put("/instances/{instance_id}", status_code=200)
-async def update_instance(instance_id: str, instance: UpdateInstance):
+def update_instance(instance_id: str, instance: UpdateInstance):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 
@@ -376,7 +376,7 @@ async def update_instance(instance_id: str, instance: UpdateInstance):
         )
 
 @router.get("/instances/{instance_id}")
-async def get_instance(instance_id: str, annotation: bool = True):
+def get_instance(instance_id: str, annotation: bool = True):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 

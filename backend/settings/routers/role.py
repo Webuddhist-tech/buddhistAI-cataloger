@@ -31,7 +31,7 @@ class RoleResponse(BaseModel):
 
 
 @router.get("", response_model=List[RoleResponse])
-async def get_roles(skip: int = 0, limit: int = 100, tenant_id: Optional[str] = None, db: Session = Depends(get_db)):
+def get_roles(skip: int = 0, limit: int = 100, tenant_id: Optional[str] = None, db: Session = Depends(get_db)):
     """Get all roles, optionally filtered by tenant_id"""
     query = db.query(Role)
     if tenant_id:
@@ -41,7 +41,7 @@ async def get_roles(skip: int = 0, limit: int = 100, tenant_id: Optional[str] = 
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
-async def get_role(role_id: str, db: Session = Depends(get_db)):
+def get_role(role_id: str, db: Session = Depends(get_db)):
     """Get a role by ID"""
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
@@ -50,7 +50,7 @@ async def get_role(role_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=RoleResponse, status_code=201)
-async def create_role(role: RoleCreate, db: Session = Depends(get_db)):
+def create_role(role: RoleCreate, db: Session = Depends(get_db)):
     """Create a new role"""
     # Verify tenant exists
     tenant = db.query(Tenant).filter(Tenant.id == role.tenant_id).first()
@@ -69,7 +69,7 @@ async def create_role(role: RoleCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{role_id}", response_model=RoleResponse)
-async def update_role(role_id: str, role: RoleUpdate, db: Session = Depends(get_db)):
+def update_role(role_id: str, role: RoleUpdate, db: Session = Depends(get_db)):
     """Update a role"""
     db_role = db.query(Role).filter(Role.id == role_id).first()
     if not db_role:
@@ -91,7 +91,7 @@ async def update_role(role_id: str, role: RoleUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{role_id}", status_code=204)
-async def delete_role(role_id: str, db: Session = Depends(get_db)):
+def delete_role(role_id: str, db: Session = Depends(get_db)):
     """Delete a role"""
     db_role = db.query(Role).filter(Role.id == role_id).first()
     if not db_role:

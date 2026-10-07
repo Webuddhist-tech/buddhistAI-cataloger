@@ -27,14 +27,14 @@ class PermissionResponse(BaseModel):
 
 
 @router.get("", response_model=List[PermissionResponse])
-async def get_permissions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_permissions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """Get all permissions"""
     permissions = db.query(Permission).offset(skip).limit(limit).all()
     return permissions
 
 
 @router.get("/{permission_id}", response_model=PermissionResponse)
-async def get_permission(permission_id: str, db: Session = Depends(get_db)):
+def get_permission(permission_id: str, db: Session = Depends(get_db)):
     """Get a permission by ID"""
     permission = db.query(Permission).filter(Permission.id == permission_id).first()
     if not permission:
@@ -43,7 +43,7 @@ async def get_permission(permission_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=PermissionResponse, status_code=201)
-async def create_permission(permission: PermissionCreate, db: Session = Depends(get_db)):
+def create_permission(permission: PermissionCreate, db: Session = Depends(get_db)):
     """Create a new permission"""
     # Check if name already exists
     existing = db.query(Permission).filter(Permission.name == permission.name).first()
@@ -61,7 +61,7 @@ async def create_permission(permission: PermissionCreate, db: Session = Depends(
 
 
 @router.put("/{permission_id}", response_model=PermissionResponse)
-async def update_permission(permission_id: str, permission: PermissionUpdate, db: Session = Depends(get_db)):
+def update_permission(permission_id: str, permission: PermissionUpdate, db: Session = Depends(get_db)):
     """Update a permission"""
     db_permission = db.query(Permission).filter(Permission.id == permission_id).first()
     if not db_permission:
@@ -80,7 +80,7 @@ async def update_permission(permission_id: str, permission: PermissionUpdate, db
 
 
 @router.delete("/{permission_id}", status_code=204)
-async def delete_permission(permission_id: str, db: Session = Depends(get_db)):
+def delete_permission(permission_id: str, db: Session = Depends(get_db)):
     """Delete a permission"""
     db_permission = db.query(Permission).filter(Permission.id == permission_id).first()
     if not db_permission:

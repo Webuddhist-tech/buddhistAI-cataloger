@@ -20,7 +20,7 @@ class TokenizeRequest(BaseModel):
 
 
 @router.post("")
-async def tokenize(request: TokenizeRequest):
+def tokenize(request: TokenizeRequest):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 

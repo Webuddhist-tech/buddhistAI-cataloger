@@ -32,7 +32,7 @@ class TenantResponse(BaseModel):
 
 
 @router.get("", response_model=List[TenantResponse])
-async def get_tenants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_tenants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """Get all tenants"""
     tenants = db.query(Tenant).offset(skip).limit(limit).all()
     return tenants
@@ -49,7 +49,7 @@ class TenantSettingsResponse(BaseModel):
         from_attributes = True
 
 @router.get("/by-domain/{domain}", response_model=TenantSettingsResponse)
-async def get_tenant_by_domain(domain: str, db: Session = Depends(get_db)):
+def get_tenant_by_domain(domain: str, db: Session = Depends(get_db)):
     """Get a tenant by domain, with its settings if exist"""
     tenant = db.query(Tenant).filter(Tenant.domain == domain).first()
     if not tenant:
@@ -74,7 +74,7 @@ async def get_tenant_by_domain(domain: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{tenant_id}", response_model=TenantSettingsResponse)
-async def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
     """Get a tenant by ID, with its settings if exist"""
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
@@ -99,7 +99,7 @@ async def get_tenant(tenant_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=TenantResponse, status_code=201)
-async def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
+def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
     """Create a new tenant"""
     # Check if domain already exists
     existing = db.query(Tenant).filter(Tenant.domain == tenant.domain).first()
@@ -119,7 +119,7 @@ async def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{tenant_id}", response_model=TenantResponse)
-async def update_tenant(tenant_id: str, tenant: TenantUpdate, db: Session = Depends(get_db)):
+def update_tenant(tenant_id: str, tenant: TenantUpdate, db: Session = Depends(get_db)):
     """Update a tenant"""
     db_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not db_tenant:
@@ -141,7 +141,7 @@ async def update_tenant(tenant_id: str, tenant: TenantUpdate, db: Session = Depe
 
 
 @router.delete("/{tenant_id}", status_code=204)
-async def delete_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def delete_tenant(tenant_id: str, db: Session = Depends(get_db)):
     """Delete a tenant"""
     db_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not db_tenant:

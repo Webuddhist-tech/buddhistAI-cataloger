@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/assign_volume/eligibility")
-async def assign_volume_eligibility(
+def assign_volume_eligibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_outliner_access),
 ):

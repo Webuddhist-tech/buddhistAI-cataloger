@@ -16,7 +16,7 @@ class UpdateSegmentContentRequest(BaseModel):
 
 
 @router.put("/{segment_id}/content")
-async def update_segment_content(segment_id: str, request: UpdateSegmentContentRequest):
+def update_segment_content(segment_id: str, request: UpdateSegmentContentRequest):
     """Update segment content by segment ID"""
     if not API_ENDPOINT:
         raise HTTPException(

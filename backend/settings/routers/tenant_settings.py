@@ -36,7 +36,7 @@ class TenantSettingsResponse(BaseModel):
 
 
 @router.get("", response_model=List[TenantSettingsResponse])
-async def get_tenant_settings(skip: int = 0, limit: int = 100, tenant_id: Optional[str] = None, db: Session = Depends(get_db)):
+def get_tenant_settings(skip: int = 0, limit: int = 100, tenant_id: Optional[str] = None, db: Session = Depends(get_db)):
     """Get all tenant settings, optionally filtered by tenant_id"""
     query = db.query(TenantSettings)
     if tenant_id:
@@ -46,7 +46,7 @@ async def get_tenant_settings(skip: int = 0, limit: int = 100, tenant_id: Option
 
 
 @router.get("/{settings_id}", response_model=TenantSettingsResponse)
-async def get_tenant_setting(settings_id: str, db: Session = Depends(get_db)):
+def get_tenant_setting(settings_id: str, db: Session = Depends(get_db)):
     """Get tenant settings by ID"""
     settings = db.query(TenantSettings).filter(TenantSettings.id == settings_id).first()
     if not settings:
@@ -55,7 +55,7 @@ async def get_tenant_setting(settings_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/tenant/{tenant_id}", response_model=TenantSettingsResponse)
-async def get_tenant_setting_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
+def get_tenant_setting_by_tenant(tenant_id: str, db: Session = Depends(get_db)):
     """Get tenant settings by tenant ID"""
     settings = db.query(TenantSettings).filter(TenantSettings.tenant_id == tenant_id).first()
     if not settings:
@@ -64,7 +64,7 @@ async def get_tenant_setting_by_tenant(tenant_id: str, db: Session = Depends(get
 
 
 @router.post("", response_model=TenantSettingsResponse, status_code=201)
-async def create_tenant_settings(settings: TenantSettingsCreate, db: Session = Depends(get_db)):
+def create_tenant_settings(settings: TenantSettingsCreate, db: Session = Depends(get_db)):
     """Create new tenant settings"""
     # Verify tenant exists
     tenant = db.query(Tenant).filter(Tenant.id == settings.tenant_id).first()
@@ -90,7 +90,7 @@ async def create_tenant_settings(settings: TenantSettingsCreate, db: Session = D
 
 
 @router.put("/{settings_id}", response_model=TenantSettingsResponse)
-async def update_tenant_settings(settings_id: str, settings: TenantSettingsUpdate, db: Session = Depends(get_db)):
+def update_tenant_settings(settings_id: str, settings: TenantSettingsUpdate, db: Session = Depends(get_db)):
     """Update tenant settings"""
     db_settings = db.query(TenantSettings).filter(TenantSettings.id == settings_id).first()
     if not db_settings:
@@ -111,7 +111,7 @@ async def update_tenant_settings(settings_id: str, settings: TenantSettingsUpdat
 
 
 @router.delete("/{settings_id}", status_code=204)
-async def delete_tenant_settings(settings_id: str, db: Session = Depends(get_db)):
+def delete_tenant_settings(settings_id: str, db: Session = Depends(get_db)):
     """Delete tenant settings"""
     db_settings = db.query(TenantSettings).filter(TenantSettings.id == settings_id).first()
     if not db_settings:

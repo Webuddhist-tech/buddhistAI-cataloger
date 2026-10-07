@@ -20,7 +20,7 @@ class Category(BaseModel):
 
 
 @router.get("", response_model=List[Category])
-async def get_categories(
+def get_categories(
     application: Optional[str] = Query(None, description="Application filter (e.g., webuddhist)"),
     language: Optional[str] = Query(None, description="Language filter (e.g., bo, en)"),
     parent_id: Optional[str] = Query(None, description="Parent category ID for subcategories")
@@ -74,7 +74,7 @@ async def get_categories(
 
 
 @router.post("", tags=["categories"])
-async def create_category(
+def create_category(
             application: str = Body(..., embed=True, description="Application identifier"),
             title: dict = Body(..., embed=True, description="Title in different languages, e.g. {'en': 'Literature', 'bo': 'རྩོམ་རིག', 'zh': ''}"),
             parent: Optional[str] = Body(None, embed=True, description="Parent category ID, or null for root category"),

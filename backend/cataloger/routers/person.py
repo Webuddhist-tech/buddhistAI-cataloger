@@ -50,7 +50,7 @@ class CreatePersonResponse(BaseModel):
 
 
 @router.get("", response_model=List[Person])
-async def get_persons(
+def get_persons(
     limit: int = 100,
     offset: int = 0,
 ):
@@ -65,14 +65,14 @@ async def get_persons(
     return response.json()
 
 @router.get("/{id}", response_model=Person)
-async def get_person(id: str):
+def get_person(id: str):
     response = requests.get(f"{API_ENDPOINT}/persons/{id}")
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
 
 @router.post("", response_model=CreatePersonResponse, status_code=201)
-async def create_person(person: CreatePerson):
+def create_person(person: CreatePerson):
     # Convert to dict, excluding None values
     payload = person.model_dump(exclude_none=True)
     response = requests.post(f"{API_ENDPOINT}/persons", json=payload)

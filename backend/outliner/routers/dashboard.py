@@ -41,7 +41,7 @@ router = APIRouter()
 
 
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)
-async def get_dashboard_stats(
+def get_dashboard_stats(
     user_id: Optional[str] = Query(None, description="Filter by annotator user ID"),
     start_date: Optional[datetime] = Query(None, description="Start of date range (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End of date range (ISO format)"),
@@ -55,7 +55,7 @@ async def get_dashboard_stats(
     "/dashboard/annotated-pending-review-documents",
     response_model=AnnotatedPendingReviewDocumentsResponse,
 )
-async def annotated_pending_review_documents(
+def annotated_pending_review_documents(
     user_id: Optional[str] = Query(None, description="Filter by annotator user ID"),
     start_date: Optional[datetime] = Query(None, description="Start of date range (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End of date range (ISO format)"),
@@ -80,7 +80,7 @@ async def annotated_pending_review_documents(
 
 
 @router.get("/dashboard/annotator-weekly-quality", response_model=AnnotatorWeeklyQualityResponse)
-async def annotator_weekly_quality(
+def annotator_weekly_quality(
     user_id: Optional[str] = Query(None, description="Filter by annotator user ID"),
     start_date: Optional[datetime] = Query(None, description="Start of date range (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End of date range (ISO format)"),
@@ -111,7 +111,7 @@ async def annotator_weekly_quality(
 
 
 @router.get("/dashboard/reviewer-stats", response_model=ReviewerStatsResponse)
-async def reviewer_stats(
+def reviewer_stats(
     user_id: Optional[str] = Query(None, description="Filter by reviewer user ID"),
     start_date: Optional[datetime] = Query(None, description="Start of date range (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End of date range (ISO format)"),
@@ -122,7 +122,7 @@ async def reviewer_stats(
 
 
 @router.get("/dashboard/statistics", response_model=StatisticsResponse)
-async def get_statistics(
+def get_statistics(
     user_id: Optional[str] = Query(None, description="Filter by annotator user ID"),
     start_date: Optional[datetime] = Query(None, description="Start of date range (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End of date range (ISO format)"),
@@ -163,12 +163,12 @@ async def get_statistics(
 
 
 @router.get("/dashboard/active-batch", response_model=ActiveBatchResponse)
-async def get_active_batch(db: Session = Depends(get_db)):
+def get_active_batch(db: Session = Depends(get_db)):
     """Return the admin-selected active BEC volume batch id, if any."""
     return get_active_batch_ctrl(db)
 
 
 @router.put("/dashboard/active-batch", response_model=ActiveBatchResponse)
-async def put_active_batch(body: ActiveBatchUpdate, db: Session = Depends(get_db)):
+def put_active_batch(body: ActiveBatchUpdate, db: Session = Depends(get_db)):
     """Set or clear the active BEC volume batch id."""
     return update_active_batch_ctrl(db, body.batch_id)

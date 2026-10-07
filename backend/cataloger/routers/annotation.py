@@ -122,7 +122,7 @@ class AnnotationResponse(BaseModel):
 
 
 @router.get("/{annotation_id}")
-async def get_annotation(annotation_id: str):
+def get_annotation(annotation_id: str):
     """Get annotation by ID"""
     response = requests.get(f"{API_ENDPOINT}/annotations/{annotation_id}")
     if response.status_code != 200:
@@ -133,7 +133,7 @@ async def get_annotation(annotation_id: str):
 
 
 @router.put("/{annotation_id}/annotation")
-async def update_annotation(annotation_id: str, annotation: UpdateAnnotation):
+def update_annotation(annotation_id: str, annotation: UpdateAnnotation):
     """Update an annotation by ID"""
     response = requests.put(
         f"{API_ENDPOINT}/annotations/{annotation_id}/annotation", 
@@ -144,7 +144,7 @@ async def update_annotation(annotation_id: str, annotation: UpdateAnnotation):
     return response.json()
 
 @router.post("/{instance_id}/annotation")
-async def create_annotation(instance_id: str, annotation: CreateAnnotation):
+def create_annotation(instance_id: str, annotation: CreateAnnotation):
     """Create an annotation for a specific instance"""
     response = requests.post(
         f"{API_ENDPOINT}/annotations/{instance_id}/annotation", 
@@ -157,7 +157,7 @@ async def create_annotation(instance_id: str, annotation: CreateAnnotation):
 
 
 @router.post("/clean-annotation",  status_code=201)
-async def clean_annotation(request: CleanAnnotationRequest):
+def clean_annotation(request: CleanAnnotationRequest):
     if not API_ENDPOINT:
         raise HTTPException(
             status_code=500, 

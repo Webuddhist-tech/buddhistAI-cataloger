@@ -267,7 +267,7 @@ def prepare_data(source_instance_id: str, target_instance_id: str) -> Dict[str, 
 
 
 @router.get("/prepare-alignment-data/{source_instance_id}/{target_instance_id}")
-async def prepare_alignment_data(
+def prepare_alignment_data(
     source_instance_id: str,
     target_instance_id: str
 ) -> PreparedDataResponse:
