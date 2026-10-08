@@ -316,9 +316,20 @@ const AnnotationSidebarInner = forwardRef<AnnotationSidebarRef, AnnotationSideba
 
   const [reviewerApplyField, setReviewerApplyField] = useState<'title' | 'author' | null>(null);
 
+  // A rejected segment comes back for the annotator to fix: the reviewer's title/author is a
+  // suggestion they can apply (kept on the rejection, since reject clears the segment's copy).
+  // Otherwise the reviewer corrected it themselves and it is final, so it is only shown.
+  const isRejectedSegment = activeSegment?.status === 'rejected';
+  const reviewerTitleSource = isRejectedSegment
+    ? activeSegment?.rejection?.reviewer_title
+    : activeSegment?.reviewer_title;
+  const reviewerAuthorSource = isRejectedSegment
+    ? activeSegment?.rejection?.reviewer_author
+    : activeSegment?.reviewer_author;
+
   const applyReviewerTitle = useCallback(async () => {
-    if (!activeSegment?.text || !activeSegmentId) return;
-    const raw = activeSegment.reviewer_title;
+    if (!activeSegment?.text || !activeSegmentId || !isRejectedSegment) return;
+    const raw = reviewerTitleSource;
     if (raw === null || raw === undefined) return;
     const trimmed = raw.trim();
     const isExplicitEmpty = trimmed === '';
@@ -364,6 +375,8 @@ const AnnotationSidebarInner = forwardRef<AnnotationSidebarRef, AnnotationSideba
   }, [
     activeSegment,
     activeSegmentId,
+    isRejectedSegment,
+    reviewerTitleSource,
     fullDocumentContent,
     handleTitleUpdate,
     t,
@@ -371,8 +384,8 @@ const AnnotationSidebarInner = forwardRef<AnnotationSidebarRef, AnnotationSideba
   ]);
 
   const applyReviewerAuthor = useCallback(async () => {
-    if (!activeSegment?.text || !activeSegmentId) return;
-    const raw = activeSegment.reviewer_author;
+    if (!activeSegment?.text || !activeSegmentId || !isRejectedSegment) return;
+    const raw = reviewerAuthorSource;
     if (raw === null || raw === undefined) return;
     const trimmed = raw.trim();
     const isExplicitEmpty = trimmed === '';
@@ -418,6 +431,8 @@ const AnnotationSidebarInner = forwardRef<AnnotationSidebarRef, AnnotationSideba
   }, [
     activeSegment,
     activeSegmentId,
+    isRejectedSegment,
+    reviewerAuthorSource,
     fullDocumentContent,
     handleAuthorUpdate,
     t,
@@ -426,15 +441,17 @@ const AnnotationSidebarInner = forwardRef<AnnotationSidebarRef, AnnotationSideba
 
   const reviewerSuggestionControls = useMemo(
     () => ({
-      reviewerTitle: activeSegment?.reviewer_title,
-      reviewerAuthor: activeSegment?.reviewer_author,
+      reviewerTitle: reviewerTitleSource,
+      reviewerAuthor: reviewerAuthorSource,
+      readOnly: !isRejectedSegment,
       applyingField: reviewerApplyField,
       onApplyReviewerTitle: applyReviewerTitle,
       onApplyReviewerAuthor: applyReviewerAuthor,
     }),
     [
-      activeSegment?.reviewer_title,
-      activeSegment?.reviewer_author,
+      reviewerTitleSource,
+      reviewerAuthorSource,
+      isRejectedSegment,
       reviewerApplyField,
       applyReviewerTitle,
       applyReviewerAuthor,

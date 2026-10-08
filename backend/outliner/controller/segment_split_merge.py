@@ -49,9 +49,14 @@ def split_segment(
     db: Session,
     segment_id: str,
     split_position: int,
-    document_id: Optional[str] = None
+    document_id: Optional[str] = None,
+    reviewer_id: Optional[str] = None,
 ) -> List[OutlinerSegment]:
-    """Split a segment at a given position"""
+    """Split a segment at a given position.
+
+    ``reviewer_id`` is set when the document's assigned reviewer splits during review: the new
+    segment is credited to them and the annotator's segment is marked as corrected.
+    """
     segment = outliner_repo.get_segment_by_pk(db, segment_id)
     document = get_document_with_cache(db, document_id)
 
@@ -110,6 +115,16 @@ def split_segment(
         segment.label = SegmentLabels.FRONT_MATTER
     label = lower_label
 
+    # Rejections are keyed by segment id, so the new half has no reviewer note of its own;
+    # inheriting `rejected` would show it flagged red with nothing explaining why.
+    new_status = 'unchecked' if segment.status == 'rejected' else (segment.status or 'unchecked')
+    if reviewer_id:
+        _mark_corrected_by_reviewer(segment, reviewer_id)
+        # A reviewer's new segment goes through review like a submitted one; inheriting
+        # `approved` would skip the reviewer's own approval and leave reviewed_by_id empty.
+        if new_status == 'approved':
+            new_status = 'checked'
+
     new_segment = OutlinerSegment(
         id=str(uuid.uuid4()),
         document_id=segment.document_id,
@@ -121,9 +136,8 @@ def split_segment(
         author=None,
         label=label,
         parent_segment_id=segment.parent_segment_id,
-        # Rejections are keyed by segment id, so the new half has no reviewer note of its own;
-        # inheriting `rejected` would show it flagged red with nothing explaining why.
-        status='unchecked' if segment.status == 'rejected' else (segment.status or 'unchecked')
+        status=new_status,
+        created_by_id=reviewer_id,
     )
 
     outliner_repo.execute_bump_segment_indices_after(
@@ -143,11 +157,23 @@ def split_segment(
     return [segment, new_segment]
 
 
+def _mark_corrected_by_reviewer(segment: OutlinerSegment, reviewer_id: str) -> None:
+    """Flag an annotator's segment the reviewer restructured. The reviewer's own segments are
+    already credited to them, so reshaping those is not a correction of the annotator."""
+    if segment.created_by_id != reviewer_id:
+        segment.corrected_by_reviewer = True
+
+
 def merge_segments(
     db: Session,
-    segment_ids: List[str]
+    segment_ids: List[str],
+    reviewer_id: Optional[str] = None,
 ) -> OutlinerSegment:
-    """Merge multiple segments into one"""
+    """Merge multiple segments into one.
+
+    ``reviewer_id`` is set when the document's assigned reviewer merges during review: the
+    surviving segment is marked as corrected (see ``split_segment``).
+    """
     if len(segment_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 segments required for merge")
 
@@ -174,6 +200,8 @@ def merge_segments(
     first_segment.title_bdrc_id = merged_title_bdrc_id
     first_segment.author_bdrc_id = merged_author_bdrc_id
     first_segment.parent_segment_id = merged_parent_id
+    if reviewer_id:
+        _mark_corrected_by_reviewer(first_segment, reviewer_id)
     first_segment.update_annotation_status()
 
     segments_to_delete_ids = [seg.id for seg in segments[1:]]

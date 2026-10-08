@@ -14,6 +14,31 @@ def _activity_time():
     return OutlinerSegment.reviewed_at
 
 
+def segment_added_by_reviewer():
+    """Segment the reviewer added during review; credited to them, not the annotator.
+    Shared with the Overview/scatter queries so every page credits the same person."""
+    return and_(
+        OutlinerSegment.created_by_id.isnot(None),
+        OutlinerSegment.created_by_id != OutlinerDocument.user_id,
+    )
+
+
+def segment_added_by_annotator():
+    """Complement of segment_added_by_reviewer (spelled out so NULL created_by_id matches)."""
+    return or_(
+        OutlinerSegment.created_by_id.is_(None),
+        OutlinerSegment.created_by_id == OutlinerDocument.user_id,
+    )
+
+
+def segment_not_reviewers_own():
+    """Approving a segment you added yourself is not a review; it counts as annotated."""
+    return or_(
+        OutlinerSegment.created_by_id.is_(None),
+        OutlinerSegment.created_by_id != OutlinerSegment.reviewed_by_id,
+    )
+
+
 def get_annotator_approved_counts(
     db: Session,
     start_date: Optional[datetime] = None,
@@ -26,10 +51,12 @@ def get_annotator_approved_counts(
     Approved = status 'approved' (reviewer assignment not required).
     Date window scoped by reviewed_at on the segment.
     Annotator identity is the document owner (document.user_id).
+    Segments the reviewer added are excluded; split/merge corrections count as edited.
     """
     clauses = [
         (OutlinerDocument.status != "deleted") | (OutlinerDocument.status.is_(None)),
-        OutlinerSegment.status == "approved"
+        OutlinerSegment.status == "approved",
+        segment_added_by_annotator(),
     ]
 
     t = _activity_time()
@@ -59,7 +86,11 @@ def get_annotator_approved_counts(
     title_is_real_correction = and_(func.length(rt_trim) > 0, rt_trim != t_trim)
     author_is_real_correction = and_(func.length(ra_trim) > 0, ra_trim != au_trim)
     edited_clauses = clauses + [
-        or_(title_is_real_correction, author_is_real_correction)
+        or_(
+            title_is_real_correction,
+            author_is_real_correction,
+            OutlinerSegment.corrected_by_reviewer.is_(True),
+        )
     ]
     edited_rows = (
         db.query(OutlinerDocument.user_id, func.count(OutlinerSegment.id))
@@ -152,6 +183,7 @@ def get_reviewer_approved_counts(
         (OutlinerDocument.status != "deleted") | (OutlinerDocument.status.is_(None)),
         OutlinerSegment.status == "approved",
         OutlinerSegment.reviewed_by_id.isnot(None),
+        segment_not_reviewers_own(),
     ]
 
     t = _activity_time()
@@ -185,7 +217,11 @@ def get_reviewer_approved_counts(
     title_is_real_correction = and_(func.length(rt_trim) > 0, rt_trim != t_trim)
     author_is_real_correction = and_(func.length(ra_trim) > 0, ra_trim != au_trim)
     edited_clauses = clauses + [
-        or_(title_is_real_correction, author_is_real_correction)
+        or_(
+            title_is_real_correction,
+            author_is_real_correction,
+            OutlinerSegment.corrected_by_reviewer.is_(True),
+        )
     ]
     edited_rows = (
         db.query(OutlinerSegment.reviewed_by_id, func.count(OutlinerSegment.id))
@@ -228,7 +264,40 @@ def get_reviewer_approved_counts(
         str(rid): int(cnt) for rid, cnt in rej_query.all() if rid is not None
     }
 
-    all_rids = rid_to_reviewed.keys() | rid_to_edited.keys() | rid_to_rejected.keys()
+    # Segments each reviewer added during review and that are now approved. Same date
+    # window as reviewed (reviewed_at) so the columns line up for a pay period.
+    annotated_clauses = [
+        (OutlinerDocument.status != "deleted") | (OutlinerDocument.status.is_(None)),
+        OutlinerSegment.status == "approved",
+        segment_added_by_reviewer(),
+    ]
+    if start_date:
+        annotated_clauses.append(t >= start_date)
+    if end_date:
+        annotated_clauses.append(t <= end_date)
+    if user_id:
+        annotated_clauses.append(
+            OutlinerSegment.created_by_id == user_id
+            if scope == "by_reviewer"
+            else OutlinerDocument.user_id == user_id
+        )
+    annotated_rows = (
+        db.query(OutlinerSegment.created_by_id, func.count(OutlinerSegment.id))
+        .join(OutlinerDocument, OutlinerSegment.document_id == OutlinerDocument.id)
+        .filter(and_(*annotated_clauses))
+        .group_by(OutlinerSegment.created_by_id)
+        .all()
+    )
+    rid_to_annotated: Dict[str, int] = {
+        str(rid): int(cnt) for rid, cnt in annotated_rows if rid is not None
+    }
+
+    all_rids = (
+        rid_to_reviewed.keys()
+        | rid_to_edited.keys()
+        | rid_to_rejected.keys()
+        | rid_to_annotated.keys()
+    )
 
     user_rows = (
         db.query(User.id, User.name)
@@ -246,6 +315,7 @@ def get_reviewer_approved_counts(
             "segments_reviewed": rid_to_reviewed.get(rid, 0),
             "edited_segments": rid_to_edited.get(rid, 0),
             "rejection_count": rid_to_rejected.get(rid, 0),
+            "segments_annotated": rid_to_annotated.get(rid, 0),
         }
         for rid in all_rids
     ]

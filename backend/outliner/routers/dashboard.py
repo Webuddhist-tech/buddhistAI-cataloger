@@ -133,6 +133,8 @@ def get_statistics(
 
     Annotator approved rule: status='approved' (no reviewed_by_id requirement).
     Reviewer approved rule: status='approved' AND reviewed_by_id set.
+    Segments a reviewer added during review count as their `segments_annotated`, not as
+    the annotator's approved or the reviewer's reviewed.
     Date window: reviewed_at on the segment.
 
     With a user filter, the reviewer side splits into `reviewers` (who reviewed that

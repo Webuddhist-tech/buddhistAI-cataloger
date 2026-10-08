@@ -133,7 +133,15 @@ export const AuthorField = ({ disabled: disabledFromParent }: AuthorFieldProps =
           </button>
         </div>
       ) : null}
-      {showReviewerAuthorSuggestion ? (
+      {showReviewerAuthorSuggestion && reviewerSuggestionControls.readOnly ? (
+        <div className="mt-2 flex flex-col gap-1 min-w-0">
+          <span className="text-xs text-gray-500">{t('outliner.reviewerSuggestion.correctedAuthor')}</span>
+          <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-2.5 py-1.5 text-sm font-monlam text-amber-950">
+            {reviewerAuthorTrimmed || t('outliner.reviewerSuggestion.emptyDisplay')}
+          </div>
+        </div>
+      ) : null}
+      {showReviewerAuthorSuggestion && !reviewerSuggestionControls.readOnly ? (
         <div className="mt-2 flex flex-col gap-1 min-w-0">
           <span className="text-xs text-gray-500">{t('outliner.reviewerSuggestion.labelAuthor')}</span>
           <button

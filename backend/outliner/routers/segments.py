@@ -34,6 +34,7 @@ from outliner.deps import (
     is_user_admin_or_reviewer,
     require_outliner_access,
 )
+from outliner.repository.document import fetch_document_by_id
 from outliner.repository.segment import (
     get_document_review_context_for_segment,
     get_document_user_id_for_segment,
@@ -162,18 +163,46 @@ def update_segments_bulk(
     return segment_responses
 
 
+def _assert_can_restructure_segments(
+    db: Session,
+    segment_id: str,
+    user: User,
+    document_id: str | None = None,
+) -> str | None:
+    """Split/merge/delete change the outline itself: only the document's assigned annotator
+    or reviewer may do it. ``document_id`` covers the first split, when no segment exists yet.
+
+    Returns the caller's id when they act as the document's reviewer (so their segments are
+    credited to them), else None.
+    """
+    doc_owner, doc_reviewer = get_document_review_context_for_segment(db, segment_id)
+    if doc_owner is None and doc_reviewer is None and document_id:
+        doc = fetch_document_by_id(db, document_id)
+        if doc:
+            doc_owner, doc_reviewer = doc.user_id, doc.reviewer_id
+    assert_assigned_document_participant(doc_owner, doc_reviewer, user)
+    if doc_reviewer == user.id and doc_owner != user.id:
+        return user.id
+    return None
+
+
 @router.post("/segments/{segment_id}/split")
 def split_segment(
     segment_id: str,
     split_request: SplitSegmentRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_outliner_access),
 ):
     """Split a segment at a given position"""
+    reviewer_id = _assert_can_restructure_segments(
+        db, split_request.segment_id, current_user, split_request.document_id
+    )
     split_segment_ctrl(
         db=db,
         segment_id=split_request.segment_id,
         split_position=split_request.split_position,
         document_id=split_request.document_id,
+        reviewer_id=reviewer_id,
     )
 
     return {"message": "segment split", "id": segment_id}
@@ -183,9 +212,17 @@ def split_segment(
 def merge_segments(
     merge_request: MergeSegmentsRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_outliner_access),
 ):
     """Merge multiple segments into one"""
-    first_segment = merge_segments_ctrl(db, merge_request.segment_ids)
+    # The controller rejects segments from different documents before changing anything,
+    # so checking the first one's document is enough.
+    reviewer_id = _assert_can_restructure_segments(
+        db, merge_request.segment_ids[0], current_user
+    )
+    first_segment = merge_segments_ctrl(
+        db, merge_request.segment_ids, reviewer_id=reviewer_id
+    )
     return build_segment_response(
         first_segment,
         db,
@@ -197,8 +234,10 @@ def merge_segments(
 def delete_segment(
     segment_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_outliner_access),
 ):
     """Delete a segment"""
+    _assert_can_restructure_segments(db, segment_id, current_user)
     delete_segment_ctrl(db, segment_id)
     return None
 

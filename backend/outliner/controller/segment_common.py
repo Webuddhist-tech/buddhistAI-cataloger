@@ -46,6 +46,8 @@ def segment_to_response_dict (seg: OutlinerSegment) -> Dict[str, Any]:
         "reviewed_by_id": seg.reviewed_by_id,
         "reviewed_at": seg.reviewed_at,
         "updated_at": seg.updated_at,
+        "created_by_id": seg.created_by_id,
+        "corrected_by_reviewer": seg.corrected_by_reviewer,
     }
 
 

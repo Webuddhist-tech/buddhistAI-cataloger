@@ -125,6 +125,9 @@ def reject_segments_bulk(
             reviewer_id=reviewer_id,
             rejection_reason=reason,
             resolved=False,
+            # Snapshot before apply_segment_review_title_author_tracking clears them below.
+            reviewer_title=segment.reviewer_title,
+            reviewer_author=segment.reviewer_author,
         )
         db.add(rejection)
         old_st = segment.status

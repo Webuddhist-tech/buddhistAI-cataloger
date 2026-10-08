@@ -17,7 +17,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/hooks/useUser';
 import {
   getSegmentRejectionHistory,
+  mergeSegments,
   rejectSegment,
+  splitSegment,
   updateSegment,
   type MarkedSpan,
   type OutlineSegmentStatus,
@@ -25,7 +27,7 @@ import {
 } from '@/api/outliner';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Check, FileText, History, Loader2, Undo, User, X } from 'lucide-react';
+import { Check, FileText, History, Loader2, Merge, Scissors, Undo, User, X } from 'lucide-react';
 import type { Segment } from '../shared/types';
 import type { FormDataType } from '@/components/outliner/AnnotationSidebar';
 import { useDocument } from '@/hooks';
@@ -33,6 +35,7 @@ import { getLabelColor, getStatusColor } from '@/components/outliner/utils';
 import ChevronUporDown from '@/components/outliner/utils/ChevronUporDown';
 import { SegmentSearchBar } from '@/components/outliner/SegmentSearchBar';
 import { SegmentHighlightedText } from '@/components/outliner/SegmentHighlightedText';
+import { ReviewerChangeBadges } from '@/components/outliner/ReviewerChangeBadges';
 import { findAllOccurrences } from '@/features/outliner';
 import { getSegmentHighlightWords } from '@/utils/segmentHighlightWords';
 import { SegmentAttributionBar } from './SegmentAttributionBar';
@@ -66,6 +69,8 @@ interface SegmentRowProps {
   readonly sanityFindings?: SanityCheckFinding[];
   /** Full document text, for showing the text each finding flags in the tooltip. */
   readonly documentContent?: string;
+  /** Next segment in document order, for the reviewer's "Merge with next". */
+  readonly nextSegment?: Segment;
 }
 
 /** null = no reviewer suggestion in DB; '' = explicit empty; else trimmed text. */
@@ -98,6 +103,7 @@ function SegmentRow({
   canEditReview = false,
   sanityFindings,
   documentContent = '',
+  nextSegment,
 }: SegmentRowProps) {
   const { documentId } = useParams<{ documentId: string }>();
   const queryClient = useQueryClient();
@@ -110,6 +116,9 @@ function SegmentRow({
   const [rejectionHistoryOpen, setRejectionHistoryOpen] = useState(false);
   const rejectionCount = segment.rejection?.count ?? 0;
   const { document: selectedDocument, isLoading: isLoadingDocument } = useDocument(documentId);
+  /** Reviewer may split/merge in the same window as Approve/Reject: submitted document, segment awaiting review. */
+  const canRestructure =
+    canEditReview && selectedDocument?.status === 'completed' && segment.status === 'checked';
   const [textSearchQuery, setTextSearchQuery] = useState('');
   const textBgColorStorageKey = `segment-text-bg-color:${segment.id}`;
   const [textBgColor, setTextBgColor] = useState('#ffffff');
@@ -224,6 +233,23 @@ function SegmentRow({
     onError: (error: Error) => {
       toast.error(`Failed to reject segment: ${error.message}`);
     }
+  });
+
+  // Reviewer fixes the outline themselves instead of rejecting. The backend credits split-off
+  // segments to the reviewer and marks the annotator's segment as corrected.
+  const restructureSuccess = (message: string) => {
+    queryClient.invalidateQueries({ queryKey: ['outliner-admin-document', documentId] });
+    toast.success(message);
+  };
+  const splitMutation = useMutation({
+    mutationFn: (splitPosition: number) => splitSegment(segment.id, splitPosition, documentId),
+    onSuccess: () => restructureSuccess('Segment split — the new segment is credited to you'),
+    onError: (error: Error) => toast.error(`Failed to split segment: ${error.message}`),
+  });
+  const mergeMutation = useMutation({
+    mutationFn: (nextId: string) => mergeSegments([segment.id, nextId]),
+    onSuccess: () => restructureSuccess('Segments merged'),
+    onError: (error: Error) => toast.error(`Failed to merge segments: ${error.message}`),
   });
 
   const handleSave = () => {
@@ -410,6 +436,10 @@ function SegmentRow({
    * live selection before the click handler runs.
    *
    * Runs alongside `reportBodyCaret`, which handles the collapsed-caret case for image sync.
+   *
+   * "Split here" lives in the same bubble and cuts at the selection start. A plain click
+   * deliberately opens nothing: reviewers click to sync the volume image, and a click in the
+   * blank space after a line would place the cut away from where the bubble appears.
    */
   const [selectionBubble, setSelectionBubble] = useState<{
     x: number;
@@ -640,7 +670,28 @@ function SegmentRow({
   );
   const isApproved = segment.status === 'approved';
   const showApproveButton= selectedDocument?.status==='completed';
-  const isSaving = statusMutation.isPending || rejectMutation.isPending || titleAuthorSaving || bdrcSaveMutation.isPending;
+  const isRestructuring = splitMutation.isPending || mergeMutation.isPending;
+  const isSaving = statusMutation.isPending || rejectMutation.isPending || titleAuthorSaving || bdrcSaveMutation.isPending || isRestructuring;
+  // Merging deletes the next segment, so only take one that is also still awaiting review.
+  const canMergeWithNext = canRestructure && nextSegment?.status === 'checked';
+
+  const splitAtSelection = () => {
+    if (!selectionBubble) return;
+    const { start } = selectionBubble;
+    setSelectionBubble(null);
+    if (start <= 0 || start >= segment.text.length) {
+      toast.error('Select text inside the segment, not at its very start');
+      return;
+    }
+    if (!globalThis.confirm('Split this segment here? The new segment starts at the selected text.')) return;
+    splitMutation.mutate(start);
+  };
+
+  const handleMergeWithNext = () => {
+    if (!nextSegment) return;
+    if (!globalThis.confirm('Merge this segment with the next one?')) return;
+    mergeMutation.mutate(nextSegment.id);
+  };
   const annotatorTitle = (
     <span className="flex items-center gap-2 text-xl">
       {segment.title?.trim() ? segment.title : '— No annotator title —'}
@@ -669,14 +720,28 @@ function SegmentRow({
             className="fixed z-[9999] -translate-x-1/2 -translate-y-full pb-2"
             style={{ left: selectionBubble.x, top: selectionBubble.y }}
           >
-            <button
-              type="button"
-              onClick={confirmSelectionReject}
-              className="flex items-center gap-1 rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg cursor-pointer hover:bg-red-700"
-            >
-              <X className="h-3 w-3 shrink-0" aria-hidden />
-              Reject
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={confirmSelectionReject}
+                className="flex items-center gap-1 rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg cursor-pointer hover:bg-red-700"
+              >
+                <X className="h-3 w-3 shrink-0" aria-hidden />
+                Reject
+              </button>
+              {canRestructure && (
+                <button
+                  type="button"
+                  onClick={splitAtSelection}
+                  disabled={isSaving}
+                  title="Start a new segment at the selected text"
+                  className="flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg cursor-pointer hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Scissors className="h-3 w-3 shrink-0" aria-hidden />
+                  Split here
+                </button>
+              )}
+            </div>
           </div>,
           document.body
         )}
@@ -711,8 +776,12 @@ function SegmentRow({
           <div className="space-y-2 pb-2 border-b border-gray-200">
         
             <div className="flex flex-wrap justify-between items-center gap-2">
-             {(segment.label || Boolean(sanityFindings?.length)) && (
+             {(segment.label ||
+               Boolean(sanityFindings?.length) ||
+               segment.created_by_id ||
+               segment.corrected_by_reviewer) && (
              <div className="inline-flex  items-center gap-1 mt-2 mb-1">
+               <ReviewerChangeBadges segment={segment} />
                {segment.label && (
                  <span
                    className={
@@ -849,6 +918,7 @@ function SegmentRow({
                   )
                 }
                 onClearAll={() => setRejectMarks([])}
+                canSplit={canRestructure}
               />
             )}
           </div>
@@ -1031,6 +1101,19 @@ function SegmentRow({
                   <X className='w-3.5 h-3.5 shrink-0' aria-hidden />
                   Reject
                 </Button>
+                {canMergeWithNext && (
+                  <Button
+                    size="sm"
+                    onClick={handleMergeWithNext}
+                    disabled={isSaving}
+                    variant="outline"
+                    title="Join this segment with the next one"
+                    className="cursor-pointer hover:bg-emerald-50 hover:border-emerald-400"
+                  >
+                    <Merge className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                    Merge with next
+                  </Button>
+                )}
               </div>
             )}
             {canEditReview && segment.status === 'approved' && (

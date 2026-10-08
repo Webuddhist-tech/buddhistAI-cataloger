@@ -40,6 +40,10 @@ class SegmentRejection(Base):
     #: [{"start": int, "end": int, "note": str | None}, ...]. Offsets are document-absolute
     #: so marks survive splits, which rewrite segment bounds but not document content.
     marked_spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: Reviewer's title/author suggestion at reject time. The segment's own copy is cleared on
+    #: reject (BDRC would otherwise prefer it over the annotator's redone title), so this keeps it.
+    reviewer_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewer_author: Mapped[str | None] = mapped_column(String, nullable=True)
     segment: Mapped["OutlinerSegment"] = relationship("OutlinerSegment", back_populates="rejections")
     reviewer: Mapped[User | None] = relationship(
         User,

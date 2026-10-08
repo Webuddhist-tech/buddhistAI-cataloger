@@ -50,6 +50,7 @@ from outliner.controller.document import (
 from outliner.controller.rejection import (
     get_segment_rejection_count,
     latest_rejection_marked_spans_for_orm_segment,
+    latest_rejection_title_author_for_orm_segment,
     latest_rejection_reason_for_orm_segment,
     latest_rejection_resolved_for_orm_segment,
     latest_rejection_reviewer_for_orm_segment,

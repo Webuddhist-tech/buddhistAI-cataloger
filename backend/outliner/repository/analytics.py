@@ -11,6 +11,10 @@ from outliner.utils.bec_client.api import fetch_volume_batch_stats
 from outliner.models.outliner import OutlinerDocument, OutlinerSegment, SegmentRejection
 from outliner.repository.dashboard_view import build_dashboard_presentation
 from outliner.repository.segment_rejection import latest_rejection_row_per_segment_subquery
+from outliner.repository.statistics import (
+    segment_added_by_annotator,
+    segment_not_reviewers_own,
+)
 
 _REVIEWER_WORK_STATS_ROLES = frozenset({"reviewer", "admin"})
 
@@ -100,9 +104,13 @@ def get_reviewer_segment_activity(
 
     ``reviewed_segments_with_title_or_author``: recorded segments where annotator title or author is set.
 
-    ``reviewer_title_author_edits``: approved segments with real title/author corrections.
+    ``reviewer_title_author_edits``: approved segments with real title/author corrections, or
+    that the reviewer split/merged.
 
     ``reviewer_rejection_count``: rejection rows filed in range (when dates set).
+
+    Segments the reviewer added themselves are not counted as reviewed (see Statistics page
+    ``segments_annotated``).
     """
     doc_filters = [
         (OutlinerDocument.status != "deleted") | (OutlinerDocument.status.is_(None))
@@ -125,6 +133,7 @@ def get_reviewer_segment_activity(
         doc_scope,
         reviewed_when,
         OutlinerSegment.reviewed_by_id.isnot(None),
+        segment_not_reviewers_own(),
     ]
     _append_segment_activity_date_window(recorded_clauses, start_date, end_date)
     recorded_rows = (
@@ -146,6 +155,7 @@ def get_reviewer_segment_activity(
         doc_scope,
         reviewed_when,
         OutlinerSegment.reviewed_by_id.isnot(None),
+        segment_not_reviewers_own(),
         has_title_or_author,
     ]
     _append_segment_activity_date_window(titled_clauses, start_date, end_date)
@@ -182,7 +192,12 @@ def get_reviewer_segment_activity(
         doc_scope,
         OutlinerSegment.status == "approved",
         OutlinerSegment.reviewed_by_id.isnot(None),
-        or_(title_is_real_correction, author_is_real_correction),
+        segment_not_reviewers_own(),
+        or_(
+            title_is_real_correction,
+            author_is_real_correction,
+            OutlinerSegment.corrected_by_reviewer.is_(True),
+        ),
     ]
     _append_segment_activity_date_window(corr_clauses, start_date, end_date)
     correction_rows = (
@@ -287,6 +302,8 @@ def get_annotator_performance_breakdown(
         .group_by(OutlinerDocument.user_id)
         .all()
     )
+    # Per-annotator segment metrics leave out segments the reviewer added during review;
+    # those are the reviewer's work (Statistics page `segments_annotated`).
     seg_rows = (
         db.query(
             OutlinerDocument.user_id,
@@ -294,7 +311,7 @@ def get_annotator_performance_breakdown(
             func.sum(title_or_author),
         )
         .join(OutlinerSegment, OutlinerSegment.document_id == OutlinerDocument.id)
-        .filter(doc_scope)
+        .filter(doc_scope, segment_added_by_annotator())
         .group_by(OutlinerDocument.user_id)
         .all()
     )
@@ -306,6 +323,7 @@ def get_annotator_performance_breakdown(
         doc_scope,
         OutlinerSegment.status == "approved",
         has_title_or_author_seg,
+        segment_added_by_annotator(),
     ]
     _append_segment_activity_date_window(approved_seg_clauses, start_date, end_date)
     approved_seg_rows = (
@@ -344,6 +362,7 @@ def get_annotator_performance_breakdown(
         doc_scope,
         OutlinerSegment.reviewed_by_id.isnot(None),
         reviewed_when,
+        segment_not_reviewers_own(),
     ]
     _append_segment_activity_date_window(review_clauses, start_date, end_date)
     review_rows = (
@@ -399,9 +418,11 @@ def get_annotator_performance_breakdown(
     rta_clauses: List[Any] = [
         doc_scope,
         OutlinerSegment.status == "approved",
+        segment_added_by_annotator(),
         or_(
             OutlinerSegment.reviewer_title.isnot(None),
             OutlinerSegment.reviewer_author.isnot(None),
+            OutlinerSegment.corrected_by_reviewer.is_(True),
         ),
     ]
     _append_segment_activity_date_window(rta_clauses, start_date, end_date)
@@ -706,9 +727,13 @@ def get_dashboard_stats(
         _apply_segment_activity_window_to_query(
             seg_base.filter(
                 OutlinerSegment.status == "approved",
+                # Annotator's segments only; seg_base has no document join, and only the
+                # reviewer's split sets created_by_id.
+                OutlinerSegment.created_by_id.is_(None),
                 or_(
                     OutlinerSegment.reviewer_title.isnot(None),
                     OutlinerSegment.reviewer_author.isnot(None),
+                    OutlinerSegment.corrected_by_reviewer.is_(True),
                 ),
             ),
             start_date,
@@ -910,6 +935,8 @@ def get_annotator_weekly_quality(
         OutlinerSegment.status == "approved",
         has_title_or_author,
         seg_time.isnot(None),
+        # The reviewer's added segments are their work, not this annotator's.
+        segment_added_by_annotator(),
     ]
     if start_date is not None:
         approved_clauses.append(seg_time >= start_date)
@@ -932,6 +959,8 @@ def get_annotator_weekly_quality(
         or_(
             OutlinerSegment.reviewer_title.isnot(None),
             OutlinerSegment.reviewer_author.isnot(None),
+            # The reviewer split/merged it instead of rejecting.
+            OutlinerSegment.corrected_by_reviewer.is_(True),
         ),
         ~was_rejected,
     )

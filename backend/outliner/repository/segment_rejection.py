@@ -42,9 +42,10 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
     Dict[str, Optional[Dict[str, Any]]],
     Dict[str, Optional[bool]],
     Dict[str, Optional[List[Dict[str, Any]]]],
+    Dict[str, Tuple[Optional[str], Optional[str]]],
 ]:
     if not segment_ids:
-        return {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}
     rows = (
         db.query(
             SegmentRejection.segment_id,
@@ -56,6 +57,8 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
             User.name,
             User.picture,
             SegmentRejection.marked_spans,
+            SegmentRejection.reviewer_title,
+            SegmentRejection.reviewer_author,
         )
         .outerjoin(User, User.id == SegmentRejection.reviewer_id)
         .filter(SegmentRejection.segment_id.in_(segment_ids))
@@ -72,6 +75,8 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
         name,
         picture,
         marked_spans,
+        reviewer_title,
+        reviewer_author,
     ) in rows:
         by_seg.setdefault(segment_id, []).append(
             (
@@ -83,6 +88,8 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
                 picture,
                 resolved,
                 marked_spans,
+                reviewer_title,
+                reviewer_author,
             )
         )
     counts: Dict[str, int] = {}
@@ -90,6 +97,7 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
     reviewers: Dict[str, Optional[Dict[str, Any]]] = {}
     latest_resolved: Dict[str, Optional[bool]] = {}
     latest_spans: Dict[str, Optional[List[Dict[str, Any]]]] = {}
+    latest_title_author: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
     for sid, items in by_seg.items():
         counts[sid] = len(items)
         latest = max(
@@ -103,11 +111,12 @@ def rejection_counts_reasons_reviewers_by_segment_ids(
         rev_id, rev_name, rev_pic = latest[3], latest[4], latest[5]
         latest_resolved[sid] = latest[6]
         latest_spans[sid] = latest[7] or None
+        latest_title_author[sid] = (latest[8], latest[9])
         if not rev_id:
             reviewers[sid] = None
         else:
             reviewers[sid] = {"id": rev_id, "name": rev_name, "picture": rev_pic}
-    return counts, reasons, reviewers, latest_resolved, latest_spans
+    return counts, reasons, reviewers, latest_resolved, latest_spans, latest_title_author
 
 
 def latest_rejection_notice_by_document_ids(
@@ -228,6 +237,7 @@ def update_segment_with_rejection_fields(db: Session, segment_list: List[dict]) 
         reviewers,
         latest_resolved,
         latest_spans,
+        latest_title_author,
     ) = rejection_counts_reasons_reviewers_by_segment_ids(db, ids)
     for s in segment_list:
         sid = s["id"]
@@ -238,9 +248,11 @@ def update_segment_with_rejection_fields(db: Session, segment_list: List[dict]) 
         reason = None
         reviewer_payload = None
         spans = None
+        rejected_title, rejected_author = None, None
         if s.get("status") == "rejected":
             reason = reasons.get(sid)
             spans = latest_spans.get(sid)
+            rejected_title, rejected_author = latest_title_author.get(sid, (None, None))
         rr = reviewers.get(sid)
         if rr and rr.get("id"):
             p = rr.get("picture")
@@ -257,6 +269,8 @@ def update_segment_with_rejection_fields(db: Session, segment_list: List[dict]) 
             "reviewer": reviewer_payload,
             "resolved": latest_resolved.get(sid),
             "marked_spans": spans,
+            "reviewer_title": rejected_title,
+            "reviewer_author": rejected_author,
         }
 
 
@@ -318,6 +332,27 @@ def latest_rejection_marked_spans_for_orm_segment(
         .first()
     )
     return (row[0] or None) if row else None
+
+
+def latest_rejection_title_author_for_orm_segment(
+    db: Optional[Session], segment: OutlinerSegment
+) -> Tuple[Optional[str], Optional[str]]:
+    """Reviewer title/author saved on the newest rejection row; only while still rejected."""
+    if segment.status != "rejected":
+        return None, None
+    rel = getattr(segment, "rejections", None)
+    if rel:
+        latest = max(rel, key=lambda r: r.created_at)
+        return latest.reviewer_title, latest.reviewer_author
+    if db is None:
+        return None, None
+    row = (
+        db.query(SegmentRejection.reviewer_title, SegmentRejection.reviewer_author)
+        .filter(SegmentRejection.segment_id == segment.id)
+        .order_by(SegmentRejection.created_at.desc())
+        .first()
+    )
+    return (row[0], row[1]) if row else (None, None)
 
 
 def mark_latest_rejection_resolved(db: Session, segment_id: str) -> None:
@@ -404,6 +439,9 @@ def apply_rejection_to_segment(
         rejection_reason=reason,
         resolved=False,
         marked_spans=marked_spans or None,
+        # Snapshot before apply_segment_review_title_author_tracking clears them below.
+        reviewer_title=segment.reviewer_title,
+        reviewer_author=segment.reviewer_author,
     )
     db.add(rejection)
     old_st = segment.status
@@ -433,6 +471,8 @@ def list_rejections_for_segment(db: Session, segment_id: str) -> List[Dict[str, 
             User.name,
             User.picture,
             SegmentRejection.marked_spans,
+            SegmentRejection.reviewer_title,
+            SegmentRejection.reviewer_author,
         )
         .outerjoin(User, User.id == SegmentRejection.reviewer_id)
         .filter(SegmentRejection.segment_id == segment_id)
@@ -440,7 +480,18 @@ def list_rejections_for_segment(db: Session, segment_id: str) -> List[Dict[str, 
         .all()
     )
     out: List[Dict[str, Any]] = []
-    for rid, created_at, reason, resolved, reviewer_id, name, picture, marked_spans in rows:
+    for (
+        rid,
+        created_at,
+        reason,
+        resolved,
+        reviewer_id,
+        name,
+        picture,
+        marked_spans,
+        reviewer_title,
+        reviewer_author,
+    ) in rows:
         reviewer_payload = None
         if reviewer_id:
             pic = picture
@@ -460,6 +511,8 @@ def list_rejections_for_segment(db: Session, segment_id: str) -> List[Dict[str, 
                 "resolved": resolved,
                 "reviewer": reviewer_payload,
                 "marked_spans": marked_spans or None,
+                "reviewer_title": reviewer_title,
+                "reviewer_author": reviewer_author,
             }
         )
     return out

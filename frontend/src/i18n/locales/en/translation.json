@@ -653,7 +653,15 @@
       "labelAuthor": "Reviewer suggestion (author)",
       "emptyDisplay": "--empty--",
       "appliedTitle": "Title updated from reviewer suggestion",
-      "appliedAuthor": "Author updated from reviewer suggestion"
+      "appliedAuthor": "Author updated from reviewer suggestion",
+      "correctedTitle": "Corrected by reviewer (title)",
+      "correctedAuthor": "Corrected by reviewer (author)"
+    },
+    "reviewerChange": {
+      "added": "Added by reviewer",
+      "addedHint": "The reviewer added this segment during review",
+      "corrected": "Corrected by reviewer",
+      "correctedHint": "The reviewer split or merged this segment during review"
     },
     "images": {
       "pageTitle": "Page {{n}}",

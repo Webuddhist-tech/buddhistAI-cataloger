@@ -61,6 +61,18 @@ class OutlinerSegment(Base):
     )
     # Indexed: spot checks look up recently reviewed documents by it.
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    # NULL = the document's annotator. A reviewer id means the reviewer added this segment
+    # (split during review) and it counts toward the reviewer, not the annotator.
+    created_by_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The reviewer split/merged this annotator segment; counted as an edit, like a title fix.
+    corrected_by_reviewer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     is_annotated: Mapped[bool] = mapped_column(default=False)
     comment: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

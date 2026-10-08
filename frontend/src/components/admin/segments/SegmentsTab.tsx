@@ -58,6 +58,7 @@ function AdminDocumentSegmentRow({
   canEditReview,
   sanityFindingsBySegmentId,
   documentContent,
+  nextSegmentById,
 }: RowComponentProps<{
   segments: Segment[];
   expandedSegments: Set<string>;
@@ -67,6 +68,7 @@ function AdminDocumentSegmentRow({
   canEditReview: boolean;
   sanityFindingsBySegmentId: Map<string, SanityCheckFinding[]>;
   documentContent: string;
+  nextSegmentById: Map<string, Segment>;
 }>) {
   const segment = segments[index];
   if (!segment) return null;
@@ -82,6 +84,7 @@ function AdminDocumentSegmentRow({
         canEditReview={canEditReview}
         sanityFindings={sanityFindingsBySegmentId.get(segment.id)}
         documentContent={documentContent}
+        nextSegment={nextSegmentById.get(segment.id)}
       />
     </div>
   );
@@ -134,6 +137,13 @@ function SegmentsTab({
     if (statusFilter === 'all') return segments;
     return segments.filter(s => (s.status ?? 'unchecked') === statusFilter);
   }, [segments, statusFilter]);
+  /** Next segment in document order (not the filtered list), for the reviewer's merge. */
+  const nextSegmentById = useMemo(() => {
+    const ordered = [...segments].sort((a, b) => a.segment_index - b.segment_index);
+    const map = new Map<string, Segment>();
+    for (let i = 0; i < ordered.length - 1; i++) map.set(ordered[i].id, ordered[i + 1]);
+    return map;
+  }, [segments]);
   const virtualListKey = useMemo(
     () => filteredSegments.map((s) => s.id).join('\0'),
     [filteredSegments]
@@ -617,6 +627,7 @@ function SegmentsTab({
                 canEditReview,
                 sanityFindingsBySegmentId: sanityCheck.findingsBySegmentId,
                 documentContent,
+                nextSegmentById,
               }}
             />
           </div>
