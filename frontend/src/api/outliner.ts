@@ -137,6 +137,9 @@ export interface SegmentRejection {
   resolved?: boolean | null;
   /** From the latest rejection; only present while status is rejected. */
   marked_spans?: MarkedSpan[] | null;
+  /** Reviewer's title/author suggestion when rejecting; only present while status is rejected. */
+  reviewer_title?: string | null;
+  reviewer_author?: string | null;
 }
 
 /** One historical rejection row (GET …/segments/:id/rejections). */
@@ -147,6 +150,8 @@ export interface SegmentRejectionHistoryItem {
   resolved?: boolean | null;
   reviewer?: SegmentRejectionReviewer | null;
   marked_spans?: MarkedSpan[] | null;
+  reviewer_title?: string | null;
+  reviewer_author?: string | null;
 }
 
 export interface SegmentRejectionHistoryResponse {
@@ -182,6 +187,10 @@ export interface OutlinerSegment {
   created_at: string;
   updated_at: string;
   comments: Comment[];
+  /** Set when the reviewer added this segment during review; null = the annotator's. */
+  created_by_id?: string | null;
+  /** The reviewer split/merged this annotator segment. */
+  corrected_by_reviewer?: boolean | null;
 }
 
 export interface DocumentCreateRequest {
@@ -1202,6 +1211,8 @@ export interface ReviewerApprovedRow {
   segments_reviewed: number;
   edited_segments: number;
   rejection_count: number;
+  /** Approved segments the reviewer added themselves during review (not in segments_reviewed). */
+  segments_annotated: number;
 }
 
 export interface StatisticsData {
@@ -1385,6 +1396,8 @@ export const outlinerSegmentToTextSegment = (
     reviewer_title: segment.reviewer_title ?? undefined,
     reviewer_author: segment.reviewer_author ?? undefined,
     comments: segment.comments,
+    created_by_id: segment.created_by_id ?? undefined,
+    corrected_by_reviewer: segment.corrected_by_reviewer ?? undefined,
   };
 };
 

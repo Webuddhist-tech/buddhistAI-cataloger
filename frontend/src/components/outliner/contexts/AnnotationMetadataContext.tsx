@@ -12,10 +12,13 @@ export interface AISuggestionsControls {
   onApplyAISuggestion: (field: 'title' | 'author', value: string) => void;
 }
 
-/** Reviewer-proposed title/author; applying persists to annotator fields and clears the suggestion. */
+/** Reviewer's title/author; applying persists to annotator fields and clears the suggestion. */
 export interface ReviewerSuggestionControls {
   reviewerTitle?: string | null;
   reviewerAuthor?: string | null;
+  /** True when the reviewer's value is a final correction (shown only); false on a rejected
+   * segment, where it is a suggestion the annotator can apply. */
+  readOnly: boolean;
   applyingField: 'title' | 'author' | null;
   onApplyReviewerTitle: () => Promise<void>;
   onApplyReviewerAuthor: () => Promise<void>;

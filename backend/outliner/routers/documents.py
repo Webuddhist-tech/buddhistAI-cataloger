@@ -275,13 +275,23 @@ def delete_document(
     return None
 
 
+def _assert_document_participant(db: Session, document_id: str, user: User) -> None:
+    """Segment-creating routes are limited to the document's assigned annotator or reviewer."""
+    doc = fetch_document_by_id(db, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    assert_assigned_document_participant(doc.user_id, doc.reviewer_id, user)
+
+
 @router.post("/documents/{document_id}/segments", response_model=SegmentResponse, status_code=201)
 def create_segment(
     document_id: str,
     segment: SegmentCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_outliner_access),
 ):
     """Create a new segment in a document"""
+    _assert_document_participant(db, document_id, current_user)
     db_segment = create_segment_ctrl(
         db=db,
         document_id=document_id,
@@ -307,8 +317,10 @@ def create_segments_bulk(
     document_id: str,
     segments: List[SegmentCreate],
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_outliner_access),
 ):
     """Create multiple segments at once"""
+    _assert_document_participant(db, document_id, current_user)
     segments_data = [seg.dict() for seg in segments]
     db_segments = create_segments_bulk_ctrl(db, document_id, segments_data)
     content = document_plain_content(db, document_id)

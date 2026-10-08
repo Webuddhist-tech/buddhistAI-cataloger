@@ -30,6 +30,10 @@ export interface TextSegment {
   rejection?: SegmentRejection | null
   is_supplied_title?: boolean | null
   comments: Comment[]
+  /** Set when the reviewer added this segment during review; unset = the annotator's. */
+  created_by_id?: string
+  /** The reviewer split/merged this annotator segment. */
+  corrected_by_reviewer?: boolean
 }
 
 export interface BubbleMenuProps {
@@ -151,6 +155,10 @@ export interface Segment {
   /** User who last marked this segment checked/approved. */
   reviewed_by?: SegmentAttributionUser | null
   reviewed_at?: string | null
+  /** Set when the reviewer added this segment during review; null = the annotator's. */
+  created_by_id?: string | null
+  /** The reviewer split/merged this annotator segment. */
+  corrected_by_reviewer?: boolean | null
 }
 
 export interface DocumentStats {

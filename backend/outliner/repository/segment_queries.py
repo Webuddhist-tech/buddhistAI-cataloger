@@ -184,6 +184,8 @@ def segment_list_for_document(db: Session, document_id: str) -> List[dict]:
             OutlinerSegment.reviewed_by_id,
             OutlinerSegment.reviewed_at,
             OutlinerSegment.updated_at,
+            OutlinerSegment.created_by_id,
+            OutlinerSegment.corrected_by_reviewer,
         )
         .filter(OutlinerSegment.document_id == document_id)
         .order_by(OutlinerSegment.segment_index)

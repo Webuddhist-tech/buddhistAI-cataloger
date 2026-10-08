@@ -11,6 +11,8 @@ interface MarkedTextChipsProps {
   readonly onRemove: (start: number) => void;
   readonly onNoteChange: (start: number, note: string) => void;
   readonly onClearAll: () => void;
+  /** Reviewer can split this segment now; adds the split instruction to the hint. */
+  readonly canSplit?: boolean;
 }
 
 /** Longest chip label before truncating; keeps rows readable when marks are long. */
@@ -42,6 +44,7 @@ export function MarkedTextChips({
   onRemove,
   onNoteChange,
   onClearAll,
+  canSplit = false,
 }: MarkedTextChipsProps) {
   const [noteOpenStart, setNoteOpenStart] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
@@ -60,6 +63,13 @@ export function MarkedTextChips({
       <p className="mt-2 text-xs text-gray-500">
         Select any incorrect text above to mark it for the annotator. Marked
         passages are listed here; the text itself stays selectable so you can copy it.
+        {canSplit && (
+          <>
+            {' '}
+            To start a new segment, double-click the first word of the new text and choose{' '}
+            <span className="font-medium text-emerald-700">Split here</span>.
+          </>
+        )}
       </p>
     );
   }

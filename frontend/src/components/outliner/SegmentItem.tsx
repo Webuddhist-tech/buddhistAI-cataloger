@@ -7,6 +7,7 @@ import { SegmentTextContent } from './SegmentTextContent'
 import { sanityFindingsTooltip } from './SanityCheckWarningContent'
 import { useDocument,useCursor, useActions } from './contexts'
 import { SplitMenu } from './SplitMenu'
+import { ReviewerChangeBadges } from './ReviewerChangeBadges'
 import { BubbleMenu } from './BubbleMenu'
 import { SEGMENT_LABEL_VALUES, segmentLabelI18nKey } from './segment-label'
 import { useOutlinerDocument } from '@/hooks/useOutlinerDocument'
@@ -199,6 +200,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
        <SegmentLabelSelector
           segment={segment}
         />
+        <ReviewerChangeBadges segment={segment} />
         </div>
 
         {isRejected && segment.rejection?.reason?.trim() ? (

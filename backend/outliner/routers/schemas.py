@@ -51,6 +51,9 @@ class SegmentRejectionSummary(BaseModel):
     reviewer: Optional[SegmentRejectionReviewer] = None
     resolved: Optional[bool] = None
     marked_spans: Optional[List[MarkedSpan]] = None
+    # Reviewer's title/author suggestion at reject time (only while still rejected).
+    reviewer_title: Optional[str] = None
+    reviewer_author: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +74,8 @@ class SegmentRejectionHistoryItem(BaseModel):
     resolved: Optional[bool] = None
     reviewer: Optional[SegmentRejectionReviewer] = None
     marked_spans: Optional[List[MarkedSpan]] = None
+    reviewer_title: Optional[str] = None
+    reviewer_author: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -172,6 +177,10 @@ class SegmentResponse(BaseModel):
     reviewed_by: Optional[SegmentAttributionUser] = None
     reviewed_at: Optional[datetime] = None
     annotator: Optional[SegmentAttributionUser] = None
+    # Set when the reviewer added this segment during review (NULL = the annotator's).
+    created_by_id: Optional[str] = None
+    # The reviewer split/merged this annotator segment.
+    corrected_by_reviewer: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -298,6 +307,8 @@ class SegmentResponseDocument(BaseModel):
     reviewed_at: Optional[datetime] = None
     annotator: Optional[SegmentAttributionUser] = None
     updated_at: Optional[datetime] = None
+    created_by_id: Optional[str] = None  # See SegmentResponse
+    corrected_by_reviewer: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -835,6 +846,8 @@ class ReviewerApprovedRow(BaseModel):
     segments_reviewed: int
     edited_segments: int = 0
     rejection_count: int = 0
+    # Approved segments the reviewer added themselves during review (not in segments_reviewed).
+    segments_annotated: int = 0
 
 
 class StatisticsResponse(BaseModel):

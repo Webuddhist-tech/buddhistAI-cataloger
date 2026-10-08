@@ -12,7 +12,12 @@ import { getDefaultDateRange } from '@/components/admin/documents/utils';
 import type { AnnotatorApprovedRow, ReviewerApprovedRow } from '@/api/outliner';
 
 type AnnotatorSortField = 'name' | 'segments_approved' | 'edited_segments' | 'rejection_rate';
-type ReviewerSortField = 'name' | 'segments_reviewed' | 'edited_segments' | 'rejection_rate';
+type ReviewerSortField =
+  | 'name'
+  | 'segments_reviewed'
+  | 'segments_annotated'
+  | 'edited_segments'
+  | 'rejection_rate';
 type SortDir = 'asc' | 'desc';
 
 const rejectionRate = (approved: number, rejected: number) =>
@@ -39,6 +44,8 @@ const ANNOTATOR_EDITED_RATE_FORMULA =
   'Edited % = edited_segments / segments_approved × 100';
 const REVIEWER_EDITED_RATE_FORMULA =
   'Edited % = edited_segments / segments_reviewed × 100';
+const REVIEWER_ANNOTATED_HINT =
+  'Approved segments the reviewer added themselves during review (not counted in Segments Reviewed)';
 
 const cardPanel =
   'rounded-2xl border border-border/70 bg-card/95 p-6 shadow-elegant backdrop-blur-[2px]';
@@ -72,6 +79,7 @@ function ReviewerTable({
   onToggleSort: (field: ReviewerSortField) => void;
 }>) {
   const total = rows.reduce((s, r) => s + r.segments_reviewed, 0);
+  const annotatedTotal = rows.reduce((s, r) => s + (r.segments_annotated ?? 0), 0);
   const editedTotal = rows.reduce((s, r) => s + r.edited_segments, 0);
   const rejectedTotal = rows.reduce((s, r) => s + r.rejection_count, 0);
 
@@ -111,6 +119,20 @@ function ReviewerTable({
                     Segments Reviewed
                     <SortIcon<ReviewerSortField>
                       field="segments_reviewed"
+                      active={sortField}
+                      dir={sortDir}
+                    />
+                  </button>
+                </th>
+                <th className="px-4 py-3 text-right tabular-nums" title={REVIEWER_ANNOTATED_HINT}>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-0.5 transition-colors hover:text-foreground"
+                    onClick={() => onToggleSort('segments_annotated')}
+                  >
+                    Segments Annotated
+                    <SortIcon<ReviewerSortField>
+                      field="segments_annotated"
                       active={sortField}
                       dir={sortDir}
                     />
@@ -159,6 +181,12 @@ function ReviewerTable({
                   <td className="px-4 py-3 text-right tabular-nums text-blue-700">
                     {row.segments_reviewed.toLocaleString()}
                   </td>
+                  <td
+                    className="px-4 py-3 text-right tabular-nums text-emerald-700"
+                    title={REVIEWER_ANNOTATED_HINT}
+                  >
+                    {(row.segments_annotated ?? 0).toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums text-amber-600">
                     {row.edited_segments.toLocaleString()}{' '}
                     <span className="text-muted-foreground" title={REVIEWER_EDITED_RATE_FORMULA}>
@@ -182,6 +210,9 @@ function ReviewerTable({
                 <td className="px-4 py-3" colSpan={2}>Total</td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-700">
                   {total.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-emerald-700">
+                  {annotatedTotal.toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-amber-600">
                   {editedTotal.toLocaleString()}{' '}
@@ -311,6 +342,7 @@ function OutlinerAdminStatistics() {
           return rejectionRate(r.segments_reviewed, r.rejection_count);
         if (reviewerSortField === 'edited_segments')
           return editedRate(r.edited_segments, r.segments_reviewed);
+        if (reviewerSortField === 'segments_annotated') return r.segments_annotated ?? 0;
         return r.segments_reviewed;
       };
       return [...rows].sort((a, b) =>

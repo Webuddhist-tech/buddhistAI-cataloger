@@ -1,5 +1,5 @@
 """Segment rejection helpers and mutations."""
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -41,6 +41,13 @@ def latest_rejection_marked_spans_for_orm_segment(
 ) -> Optional[List[Dict[str, Any]]]:
     """Reviewer-marked wrong-text spans on the latest rejection row."""
     return outliner_repo.latest_rejection_marked_spans_for_orm_segment(db, segment)
+
+
+def latest_rejection_title_author_for_orm_segment(
+    db: Optional[Session], segment: OutlinerSegment
+) -> Tuple[Optional[str], Optional[str]]:
+    """Reviewer title/author saved on the latest rejection row."""
+    return outliner_repo.latest_rejection_title_author_for_orm_segment(db, segment)
 
 
 def reject_segment(

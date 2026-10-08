@@ -11,6 +11,7 @@ from outliner.controller.outliner import (
     latest_rejection_reviewer_for_orm_segment as latest_rejection_reviewer_for_orm_segment_ctrl,
     latest_rejection_resolved_for_orm_segment as latest_rejection_resolved_for_orm_segment_ctrl,
     latest_rejection_marked_spans_for_orm_segment as latest_rejection_marked_spans_for_orm_segment_ctrl,
+    latest_rejection_title_author_for_orm_segment as latest_rejection_title_author_for_orm_segment_ctrl,
 )
 from outliner.utils.outliner_utils import get_comments_list, segment_body_from_document
 
@@ -123,12 +124,17 @@ def build_segment_response(
             if db is not None
             else None
         )
+        rejected_title, rejected_author = latest_rejection_title_author_for_orm_segment_ctrl(
+            db, segment
+        )
         rejection = SegmentRejectionSummary(
             count=rejection_count,
             reason=rejection_reason if segment.status == "rejected" else None,
             reviewer=rev,
             resolved=resolved_flag,
             marked_spans=latest_rejection_marked_spans_for_orm_segment_ctrl(db, segment),
+            reviewer_title=rejected_title,
+            reviewer_author=rejected_author,
         )
     resolved_text: Optional[str] = None
     if document_content is not None:
@@ -197,6 +203,8 @@ def build_segment_response(
         reviewed_by=reviewed_by,
         reviewed_at=getattr(segment, "reviewed_at", None),
         annotator=annotator,
+        created_by_id=segment.created_by_id,
+        corrected_by_reviewer=segment.corrected_by_reviewer,
     )
 
 

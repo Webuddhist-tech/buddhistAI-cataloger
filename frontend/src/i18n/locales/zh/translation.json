@@ -651,7 +651,15 @@
       "labelAuthor": "审核员建议（作者）",
       "emptyDisplay": "--empty--",
       "appliedTitle": "已采用审核员建议的标题",
-      "appliedAuthor": "已采用审核员建议的作者"
+      "appliedAuthor": "已采用审核员建议的作者",
+      "correctedTitle": "审核员已修正（标题）",
+      "correctedAuthor": "审核员已修正（作者）"
+    },
+    "reviewerChange": {
+      "added": "审核员添加",
+      "addedHint": "审核员在审核时添加了此段落",
+      "corrected": "审核员已修正",
+      "correctedHint": "审核员在审核时拆分或合并了此段落"
     },
     "images": {
       "pageTitle": "第 {{n}} 页",
