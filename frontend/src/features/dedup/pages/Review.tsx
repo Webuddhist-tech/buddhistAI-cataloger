@@ -12,6 +12,7 @@ import FullTextDialog, { type FullTextView } from '../components/FullTextDialog'
 import PreferredCopyDialog, { type PreferredChoice } from '../components/PreferredCopyDialog';
 import CopyPairLink from '../components/CopyPairLink';
 import PairEvidence from '../components/PairEvidence';
+import type { ScanTag } from '../components/ScanPanel';
 import { useActiveTimer } from '../hooks/useActiveTimer';
 import {
   useAdjudicationItem,
@@ -83,6 +84,8 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   const [confidence, setConfidence] = useState<number | null>(null);
   const [dialog, setDialog] = useState<CantAnswerStart | null>(null);
   const [fullText, setFullText] = useState<FullTextView | null>(null);
+  // Stays open from pair to pair, so the scans can be read alongside each one.
+  const [scan, setScan] = useState<ScanTag | null>(null);
   const [askPreferred, setAskPreferred] = useState(false);
   const advanceTimer = useRef<number | undefined>(undefined);
   // The docked action bar wraps onto several rows on a phone; the page keeps its
@@ -227,7 +230,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   const problems = hasIssue(item) ? item.issues!.map((i) => issueLabel(i.kind)) : [];
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6" style={{ paddingBottom: barHeight + 24 }}>
+    <div className={`w-full ${scan ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6`} style={{ paddingBottom: barHeight + 24 }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           to={adjudicate ? '/dedup/adjudicate' : '/dedup'}
@@ -252,7 +255,15 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
         </div>
       </div>
 
-      <PairEvidence evidence={ev} cardA={cardA} cardB={cardB} onFullText={setFullText}>
+      <PairEvidence
+        evidence={ev}
+        cardA={cardA}
+        cardB={cardB}
+        onFullText={setFullText}
+        scan={scan}
+        onScanChange={setScan}
+        bottomInset={barHeight}
+      >
         {adjItem && <AnnotatorAnswers answers={adjItem.annotations} a={cardA} b={cardB} />}
       </PairEvidence>
 

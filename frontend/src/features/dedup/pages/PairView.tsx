@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import CopyPairLink from '../components/CopyPairLink';
 import FullTextDialog, { type FullTextView } from '../components/FullTextDialog';
 import PairEvidence from '../components/PairEvidence';
+import type { ScanTag } from '../components/ScanPanel';
 import { useBatchName, usePair } from '../hooks/useReview';
 
 // A pair opened from a shared link (e.g. a spreadsheet): the texts and scores only. No
@@ -16,6 +17,7 @@ export default function PairView() {
   const pair = usePair(itemId);
   const batchName = useBatchName();
   const [fullText, setFullText] = useState<FullTextView | null>(null);
+  const [scan, setScan] = useState<ScanTag | null>(null);
 
   if (pair.isLoading) {
     return <div className="py-24 text-center text-gray-500">{t('dedup.pairView.loading')}</div>;
@@ -35,7 +37,7 @@ export default function PairView() {
   const cardB = p.evidence.b ?? { mw_id: p.subject.b_mw ?? '' };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-4 sm:px-6 sm:pt-6 lg:px-8">
+    <div className={`mx-auto w-full ${scan ? 'max-w-none' : 'max-w-7xl'} px-4 pb-10 pt-4 sm:px-6 sm:pt-6 lg:px-8`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t('dedup.pairView.title', { id: p.item_id })}</h1>
@@ -46,7 +48,7 @@ export default function PairView() {
         <CopyPairLink itemId={p.item_id} />
       </div>
 
-      <PairEvidence evidence={p.evidence} cardA={cardA} cardB={cardB} onFullText={setFullText} />
+      <PairEvidence evidence={p.evidence} cardA={cardA} cardB={cardB} onFullText={setFullText} scan={scan} onScanChange={setScan} />
 
       {fullText && (
         <FullTextDialog a={cardA} b={cardB} view={fullText} onViewChange={setFullText} onClose={() => setFullText(null)} />

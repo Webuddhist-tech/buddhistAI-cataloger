@@ -10,7 +10,10 @@ import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdjudicationQueue, useBatchName, useClaimItems, useMyItems } from '../hooks/useReview';
 import { formatNumber, hasIssue, isDecided, verdictLabel } from '../utils';
 
-const STATE_TABS: MyItemsState[] = ['all', 'open', 'done'];
+// "To do" only, like the outliner list: answered pairs drop out once submitted, so the
+// list shows just the work left. Annotators asked not to see finished work here; add
+// 'done' / 'all' back to bring the tabs back.
+const STATE_TABS: MyItemsState[] = ['open' /* , 'done', 'all' */];
 
 const VERDICT_STYLE: Record<string, string> = {
   same: 'bg-green-50 text-green-700',
@@ -37,7 +40,7 @@ export default function Queue() {
   const navigate = useNavigate();
   const batchName = useBatchName();
   const { user } = useUser();
-  const [state, setState] = useState<MyItemsState>('all');
+  const [state, setState] = useState<MyItemsState>('open');
   const [q, setQ] = useState('');
   // Reviewers are the Deduplicator's adjudicators: they have no annotation work.
   const isReviewer = user?.role === 'reviewer';
@@ -125,6 +128,7 @@ export default function Queue() {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        {STATE_TABS.length > 1 ? (
         <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
           {STATE_TABS.map((key) => (
             <button
@@ -140,6 +144,9 @@ export default function Queue() {
             </button>
           ))}
         </div>
+        ) : (
+          <span />
+        )}
         <Input
           type="search"
           value={q}

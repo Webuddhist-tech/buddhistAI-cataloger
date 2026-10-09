@@ -28,6 +28,7 @@ import {
   type ReviewItem,
   type ReviewMode,
 } from '../api/review';
+import { fetchScanPages } from '../api/scans';
 import { batchNames } from '../utils';
 
 /** Root key for every review query; use with invalidateQueries. */
@@ -45,6 +46,7 @@ const keys = {
   adjudicationItem: (itemId: number) => [...reviewQueryKeyRoot, 'adjudication', 'item', itemId] as const,
   text: (mwId: string) => [...reviewQueryKeyRoot, 'text', mwId] as const,
   diff: (a: string, b: string, g: DiffGranularity) => [...reviewQueryKeyRoot, 'diff', a, b, g] as const,
+  scanPages: (imageGroup: string) => [...reviewQueryKeyRoot, 'scan-pages', imageGroup] as const,
   adminRoot: [...reviewQueryKeyRoot, 'admin'] as const,
   adminOverview: [...reviewQueryKeyRoot, 'admin', 'overview'] as const,
   annotators: [...reviewQueryKeyRoot, 'admin', 'annotators'] as const,
@@ -221,6 +223,17 @@ export function useFullText(mwId: string | undefined, enabled = true) {
     queryFn: ({ signal }) => fetchText(mwId!, { signal }),
     enabled: Boolean(mwId) && enabled,
     staleTime: Infinity,
+  });
+}
+
+/** BDRC's page list for one image group (a scanned volume). */
+export function useScanPages(imageGroup: string | null) {
+  return useQuery({
+    queryKey: keys.scanPages(imageGroup ?? ''),
+    queryFn: ({ signal }) => fetchScanPages(imageGroup!, { signal }),
+    enabled: Boolean(imageGroup),
+    staleTime: Infinity,
+    retry: 1,
   });
 }
 

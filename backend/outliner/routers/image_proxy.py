@@ -12,8 +12,12 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.responses import StreamingResponse
 
+from user.models.user import User
+
+from dedup.deps import require_dedup_access
 from outliner.deps import require_outliner_access
 
 router = APIRouter()
@@ -69,6 +73,21 @@ def _cache_seconds() -> int:
         return _DEFAULT_CACHE_SECONDS
 
 
+_image_bearer = HTTPBearer(auto_error=False)
+
+
+def require_scan_access(
+    creds: HTTPAuthorizationCredentials | None = Depends(_image_bearer),
+) -> User:
+    """Outliner users (image sidebar) or Deduplicator users (scan panel)."""
+    try:
+        return require_outliner_access(creds)
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+    return require_dedup_access(creds)
+
+
 @router.get("/proxy/image")
 async def proxy_external_image(
     url: str = Query(
@@ -77,7 +96,7 @@ async def proxy_external_image(
         max_length=2048,
         description="Full https URL of an image to fetch",
     ),
-    _auth_user: object = Depends(require_outliner_access),
+    _auth_user: object = Depends(require_scan_access),
 ):  
     
     parsed = urlparse(url)

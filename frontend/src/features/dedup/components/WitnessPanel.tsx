@@ -8,7 +8,11 @@ import { WitnessMeta } from './SourceBadge';
 
 // The item only carries `head` / `tail` (~220 characters each); the full text is
 // fetched when asked for.
-export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; card: WitnessCard }>) {
+export default function WitnessPanel({
+  tag,
+  card,
+  onShowScans,
+}: Readonly<{ tag: 'A' | 'B'; card: WitnessCard; onShowScans?: () => void }>) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const full = useFullText(card.mw_id, expanded);
@@ -36,7 +40,7 @@ export default function WitnessPanel({ tag, card }: Readonly<{ tag: 'A' | 'B'; c
           </div>
         </div>
         <div className="mt-3">
-          <WitnessMeta card={card} />
+          <WitnessMeta card={card} onShowScans={onShowScans} />
         </div>
       </header>
 

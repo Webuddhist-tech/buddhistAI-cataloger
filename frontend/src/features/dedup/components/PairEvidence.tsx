@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Columns2, GitCompareArrows } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PairEvidence as Evidence, WitnessCard } from '../api/review';
 import type { FullTextView } from './FullTextDialog';
+import ScanPanel, { type ScanTag } from './ScanPanel';
 import WitnessPanel from './WitnessPanel';
 import { issueLabel, overlapNote, pct } from '../utils';
 
@@ -17,15 +18,25 @@ export default function PairEvidence({
   cardA,
   cardB,
   onFullText,
+  scan,
+  onScanChange,
+  bottomInset,
   children,
 }: Readonly<{
   evidence: Evidence;
   cardA: WitnessCard;
   cardB: WitnessCard;
   onFullText: (view: FullTextView) => void;
+  /** Whose scans are open beside the texts. Held by the page, which widens while they are. */
+  scan: ScanTag | null;
+  onScanChange: (tag: ScanTag | null) => void;
+  /** Height of the docked action bar, so the scan panel stops above it. */
+  bottomInset?: number;
   children?: ReactNode;
 }>) {
   const { t } = useTranslation();
+  const closeScan = useCallback(() => onScanChange(null), [onScanChange]);
+  const split = useSplit();
   const m = ev.metrics ?? {};
   // Same title, clearly different author: the author data cannot settle it.
   const authorConflict =
@@ -77,10 +88,39 @@ export default function PairEvidence({
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <WitnessPanel tag="A" card={cardA} />
-          <WitnessPanel tag="B" card={cardB} />
-        </div>
+        {/* With the scans open, the two texts stack on the left and the scans sit beside
+            them; the divider between the two can be dragged. */}
+        {scan ? (
+          <div
+            ref={split.ref}
+            className="mt-4 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,var(--split))_auto_minmax(0,1fr)] lg:gap-0"
+            style={{ '--split': `${split.pct}%` } as React.CSSProperties}
+          >
+            <div className="flex min-w-0 flex-col gap-4">
+              <WitnessPanel tag="A" card={cardA} onShowScans={() => onScanChange('A')} />
+              <WitnessPanel tag="B" card={cardB} onShowScans={() => onScanChange('B')} />
+            </div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('dedup.scans.resize')}
+              title={t('dedup.scans.resize')}
+              onPointerDown={split.onPointerDown}
+              onDoubleClick={split.reset}
+              className="group hidden w-4 cursor-col-resize touch-none justify-center lg:flex"
+            >
+              <span className="sticky top-1/2 h-12 w-1 rounded-full bg-gray-300 group-hover:bg-blue-400" />
+            </div>
+            <div className="order-first min-w-0 lg:order-none">
+              <ScanPanel cards={{ A: cardA, B: cardB }} tag={scan} onTagChange={onScanChange} onClose={closeScan} bottomInset={bottomInset} />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <WitnessPanel tag="A" card={cardA} onShowScans={() => onScanChange('A')} />
+            <WitnessPanel tag="B" card={cardB} onShowScans={() => onScanChange('B')} />
+          </div>
+        )}
 
         {/* Collapsed by default: the scores anchor reviewers toward agreeing with the machine. */}
         <details className="mt-4 rounded-lg border border-gray-200 bg-white">
@@ -129,6 +169,64 @@ export default function PairEvidence({
         </details>
     </>
   );
+}
+
+const SPLIT_KEY = 'dedup.scanSplit';
+const SPLIT_DEFAULT = 42; // % of the width for the texts; pecha folios are wide
+const SPLIT_MIN = 25;
+const SPLIT_MAX = 70;
+
+function readSplit(): number {
+  try {
+    const v = Number(localStorage.getItem(SPLIT_KEY));
+    return v >= SPLIT_MIN && v <= SPLIT_MAX ? v : SPLIT_DEFAULT;
+  } catch {
+    return SPLIT_DEFAULT;
+  }
+}
+
+/** Width of the texts column, as a % of the row; dragged from the divider, remembered per browser. */
+function useSplit() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pct, setPct] = useState(readSplit);
+
+  const save = (v: number) => {
+    try {
+      localStorage.setItem(SPLIT_KEY, String(Math.round(v)));
+    } catch {
+      // Private window or blocked storage: the split just is not remembered.
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const row = ref.current;
+    if (!row) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const rect = row.getBoundingClientRect();
+    let last = pct;
+    const move = (ev: PointerEvent) => {
+      last = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, ((ev.clientX - rect.left) / rect.width) * 100));
+      setPct(last);
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      save(last);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+
+  const reset = () => {
+    setPct(SPLIT_DEFAULT);
+    save(SPLIT_DEFAULT);
+  };
+
+  return { ref, pct, onPointerDown, reset };
 }
 
 function Metric({ k, v, note }: { k: string; v: string; note?: string }) {

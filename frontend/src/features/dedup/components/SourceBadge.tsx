@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Images } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { WitnessCard } from '../api/review';
 import { formatNumber, sourceLabel } from '../utils';
@@ -19,24 +19,32 @@ export function SourceBadge({ source }: Readonly<{ source: string | null | undef
   );
 }
 
-export function WitnessMeta({ card }: Readonly<{ card: Pick<WitnessCard, 'etext_source' | 'text_length' | 'image_url'> }>) {
+// With `onShowScans` the scans open in the page's side panel; without it, on BDRC in a new tab.
+export function WitnessMeta({
+  card,
+  onShowScans,
+}: Readonly<{ card: Pick<WitnessCard, 'etext_source' | 'text_length' | 'image_url'>; onShowScans?: () => void }>) {
   const { t } = useTranslation();
+  const linkClass = 'inline-flex items-center gap-1 font-medium text-blue-600 underline-offset-2 hover:text-blue-800 hover:underline';
+  let scans = <span className="italic text-gray-400">{t('dedup.witness.noScan')}</span>;
+  if (card.image_url && onShowScans) {
+    scans = (
+      <button onClick={onShowScans} className={`cursor-pointer ${linkClass}`}>
+        <Images className="h-3.5 w-3.5" /> {t('dedup.witness.scannedPages')}
+      </button>
+    );
+  } else if (card.image_url) {
+    scans = (
+      <a href={card.image_url} target="_blank" rel="noreferrer" className={linkClass}>
+        {t('dedup.witness.scannedPages')} <ExternalLink className="h-3.5 w-3.5" />
+      </a>
+    );
+  }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-gray-500">
       <SourceBadge source={card.etext_source} />
       <span className="tabular-nums">{t('dedup.witness.characters', { n: formatNumber(card.text_length ?? 0) })}</span>
-      {card.image_url ? (
-        <a
-          href={card.image_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 font-medium text-blue-600 underline-offset-2 hover:text-blue-800 hover:underline"
-        >
-          {t('dedup.witness.scannedPages')} <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      ) : (
-        <span className="italic text-gray-400">{t('dedup.witness.noScan')}</span>
-      )}
+      {scans}
     </div>
   );
 }

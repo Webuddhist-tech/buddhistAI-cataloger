@@ -835,6 +835,15 @@
       "minutes": "{{m}} min {{s}} s",
       "hours": "{{h}} h {{m}} min"
     },
+    "scans": {
+      "openInBdrc": "Open on BDRC",
+      "close": "Close scanned pages",
+      "page": "Page {{n}} of {{total}}",
+      "goToPage": "Go to page",
+      "loadFailed": "Could not load the scanned pages: {{error}}",
+      "noPages": "BDRC lists no pages for this scan.",
+      "resize": "Drag to resize, double-click to reset"
+    },
     "witness": {
       "characters": "{{n}} characters",
       "scannedPages": "Scanned pages",
