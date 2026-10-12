@@ -7,7 +7,7 @@ import { addActiveTime } from '../api/review';
 //
 // A pair that was already answered when the visit began only gets the visit's time if
 // the visit ends with a new answer (`commit`); rereading it and leaving adds nothing.
-const IDLE_AFTER_MS = 5 * 60 * 1000;
+const IDLE_AFTER_MS = 2.5 * 60 * 1000;
 const TICK_MS = 1000;
 const FLUSH_EVERY_MS = 60 * 1000;
 const ACTIVITY = ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart'] as const;
