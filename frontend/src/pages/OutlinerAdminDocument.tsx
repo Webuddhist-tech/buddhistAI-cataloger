@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DocumentsTab } from '../components/admin';
 import MyReviewedSegmentsFab from '../components/admin/documents/MyReviewedSegmentsFab';
+import { isHideTestRejected } from '../components/admin/documents/HideTestRejectedToggle';
 import { SimplePagination } from '../components/ui/simple-pagination';
 import type { Document } from '../components/admin/shared/types';
 import { useDocuments } from '../hooks';
@@ -17,6 +18,7 @@ function OutlinerAdminDocument() {
   const debouncedTitle = searchParams.get('title') || undefined;
   const includeApproved = searchParams.get('include_approved') === 'true';
   const includeSkipped = searchParams.get('include_skipped') === 'true';
+  const hideTestRejected = isHideTestRejected(searchParams);
   const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
   const filters: DocumentFilters = useMemo(
     () => ({
@@ -29,8 +31,9 @@ function OutlinerAdminDocument() {
       includeApproved,
       includeSkipped,
       excludeOwnAssignedDocuments: true,
+      hideTestRejected,
     }),
-    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped]
+    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped, hideTestRejected]
   );
 
   const { hasPrevPage, hasNextPage, isFetching,handleNextPage,handlePrevPage } = useDocuments(filters);

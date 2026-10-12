@@ -105,6 +105,10 @@ def list_documents(
     include_deleted: bool = False,
     include_approved: bool = False,
     include_skipped: bool = False,
+    hide_test_rejected: bool = Query(
+        False,
+        description="TEMP: hide Tsenlek (mmBERT test) documents that are fully reviewed and have a rejected segment",
+    ),
     db: Session = Depends(get_db),
 ):
 
@@ -119,6 +123,7 @@ def list_documents(
         include_approved=include_approved,
         include_skipped=include_skipped,
         title=title,
+        hide_test_rejected=hide_test_rejected,
     )
     return result
 

@@ -28,6 +28,7 @@ import { OUTLINER_BASE_URL } from '@/config/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Switch } from '@/components/ui/switch';
 import SelfRviewedToggle from './SelfRviewedToggle';
+import HideTestRejectedToggle, { isHideTestRejected } from './HideTestRejectedToggle';
 import { PlusIcon } from 'lucide-react';
 
 
@@ -50,6 +51,7 @@ function DocumentsTab({
   const debouncedTitle=searchParams.get('title') || undefined
   const includeApproved = searchParams.get('include_approved') === 'true';
   const includeSkipped = searchParams.get('include_skipped') === 'true';
+  const hideTestRejected = isHideTestRejected(searchParams);
   const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
 
   const [draftStatus, setDraftStatus] = useState(status ?? 'all');
@@ -72,8 +74,9 @@ function DocumentsTab({
       includeApproved,
       includeSkipped,
       excludeOwnAssignedDocuments: true,
+      hideTestRejected,
     }),
-    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped]
+    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped, hideTestRejected]
   );
 
   
@@ -140,6 +143,7 @@ function DocumentsTab({
         <div className='flex items-center gap-2'>
           <h3 className="text-xl font-semibold text-gray-900">Document Management </h3>
           <SelfRviewedToggle/>
+          <HideTestRejectedToggle/>
           <Button disabled={assignReviewerMutation.isPending} variant='outline' size='sm' onClick={assignReviewer} className='hover:bg-primary/10 group hover:text-primary cursor-pointer'>
             {assignReviewerMutation.isPending ? 'Assigning...' : 'Assign me'}</Button>         
         </div>

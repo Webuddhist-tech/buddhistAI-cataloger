@@ -73,6 +73,7 @@ def list_documents(
     include_skipped: bool = False,
     title: Optional[str] = None,
     exclude_document_user_id: Optional[str] = None,
+    hide_test_rejected: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all outliner documents, optionally filtered by user, status, and deletion status.
@@ -86,6 +87,7 @@ def list_documents(
         include_deleted: If False (default), exclude deleted documents. If True, include all documents.
         title: If set, case-insensitive substring match on document filename (list UI title).
         exclude_document_user_id: If set, omit documents whose owner/assignee user_id equals this value.
+        hide_test_rejected: TEMP. If True, omit Tsenlek (mmBERT test) documents that are fully reviewed and have a rejected segment.
     """
     return outliner_repo.list_documents(
         db,
@@ -99,6 +101,7 @@ def list_documents(
         include_skipped=include_skipped,
         title=title,
         exclude_document_user_id=exclude_document_user_id,
+        hide_test_rejected=hide_test_rejected,
     )
 
 

@@ -21,6 +21,12 @@ from outliner.repository.segment_rejection import (
 )
 
 
+# Placeholder annotator that owns the imported mmBERT test outlines. Nobody works its
+# rejected segments, so those documents look stuck in reviewers' lists.
+# TEMP: remove with hide_test_rejected once there is a decision on rejected mmBERT docs.
+TSENLEK_TEST_USER_ID = "ai-google-oauth2|102282149599861624522"
+
+
 def list_documents(
     db: Session,
     user_id: Optional[str] = None,
@@ -33,6 +39,7 @@ def list_documents(
     include_skipped: bool = False,
     title: Optional[str] = None,
     exclude_document_user_id: Optional[str] = None,
+    hide_test_rejected: bool = False,
 ) -> List[Dict[str, Any]]:
     query = db.query(OutlinerDocument)
     if user_id:
@@ -73,6 +80,25 @@ def list_documents(
             OutlinerSegment.status == "rejected",
         )
     )
+    if hide_test_rejected:
+        # Only hide once fully reviewed, so reviewers can still finish partly reviewed docs.
+        has_pending_segment = exists().where(
+            and_(
+                OutlinerSegment.document_id == OutlinerDocument.id,
+                or_(
+                    OutlinerSegment.status.is_(None),
+                    OutlinerSegment.status.notin_(["approved", "rejected"]),
+                ),
+            )
+        )
+        query = query.filter(
+            or_(
+                OutlinerDocument.user_id.is_(None),
+                OutlinerDocument.user_id != TSENLEK_TEST_USER_ID,
+                not_(has_rejected_segment),
+                has_pending_segment,
+            )
+        )
     documents = (
         query.order_by(has_rejected_segment.desc(), OutlinerDocument.updated_at.desc())
         .offset(skip)
