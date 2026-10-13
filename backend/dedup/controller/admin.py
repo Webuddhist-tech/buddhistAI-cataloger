@@ -15,7 +15,7 @@ from dedup import client
 from dedup.client import ReviewApiError
 from dedup.controller.adjudication import annotations
 from dedup.controller.dedup import _views_for, bdrc_error
-from dedup.deps import can_adjudicate, can_annotate, has_dedup_access
+from dedup.deps import can_adjudicate, can_annotate, dedup_role, has_dedup_access
 from dedup.models.dedup import SETTING_REVIEW_MODE, DedupAssignment
 from dedup.repository import dedup_repository as repo
 from dedup.schemas import (
@@ -132,7 +132,7 @@ def annotators(db: Session) -> list[AnnotatorOut]:
                 name=u.name,
                 email=u.email,
                 picture=u.picture,
-                role=(u.role or "").strip().lower() or None,
+                role=dedup_role(u),
                 has_access=has_dedup_access(u),
                 total_active_seconds=total_by_user.get(uid, 0),
                 avg_active_seconds=sum(answered_time) / len(answered_time) if answered_time else None,

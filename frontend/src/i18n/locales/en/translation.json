@@ -1214,7 +1214,32 @@
         "label": "Deduplicator admin",
         "overview": "Overview",
         "annotators": "Annotators",
-        "adjudications": "Adjudications"
+        "adjudications": "Adjudications",
+        "users": "Users"
+      },
+      "users": {
+        "subtitle": "Who can use the Deduplicator, and as annotator or adjudicator. Separate from Outliner roles.",
+        "show": {
+          "access": "With dedup access",
+          "all": "All users"
+        },
+        "search": "Search name or email",
+        "col": {
+          "user": "User",
+          "access": "Dedup access",
+          "role": "Dedup role"
+        },
+        "hasAccess": "Yes",
+        "noAccess": "No",
+        "roleAnnotator": "Annotator",
+        "roleAdjudicator": "Adjudicator",
+        "roleAdmin": "Admin",
+        "adminNote": "Admins are admins in both tools.",
+        "empty": "No users found.",
+        "count_one": "{{count}} user · page {{page}}",
+        "count_other": "{{count}} users · page {{page}}",
+        "saved": "Updated {{name}}",
+        "saveFailed": "Could not update: {{error}}"
       },
       "adminsOnly": "Admins only.",
       "singleOn": "Single review is on",

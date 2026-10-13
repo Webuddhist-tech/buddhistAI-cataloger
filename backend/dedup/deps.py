@@ -1,7 +1,8 @@
 """Auth dependency for dedup routes.
 
-Same checks as ``require_outliner_access``, but gated on its own ``dedup`` permission
-so the two tools can be granted independently.
+Independent of the Outliner: access is the ``dedup`` permission, and the user's part here
+(annotator / adjudicator) is ``users.dedup_role``, not the Outliner ``users.role``. Only
+"admin" is shared by both tools.
 """
 from __future__ import annotations
 
@@ -16,7 +17,6 @@ from core.database import SessionLocal
 from user.models.user import User
 
 DEDUP_PERMISSION = "dedup"
-_ALLOWED_ROLES = frozenset({"admin", "reviewer", "annotator"})
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -52,8 +52,10 @@ def _user_from_token(creds: HTTPAuthorizationCredentials | None) -> User:
 
 
 def has_dedup_access(user: User) -> bool:
-    role = (user.role or "user").strip().lower()
-    return role in _ALLOWED_ROLES and DEDUP_PERMISSION in _parse_permissions(user.permissions)
+    """The `dedup` permission alone, granted from the Deduplicator's Users page. The
+    Outliner role (`user.role`) plays no part, so a new sign-up ("user") can be let in
+    here without being given an Outliner role."""
+    return DEDUP_PERMISSION in _parse_permissions(user.permissions)
 
 
 def require_logged_in(
@@ -68,10 +70,8 @@ def require_dedup_access(
 ) -> User:
     """Validate the Auth0 bearer token and ensure the user may use the dedup tool."""
     user = _user_from_token(creds)
-    if DEDUP_PERMISSION not in _parse_permissions(user.permissions):
+    if not has_dedup_access(user):
         raise HTTPException(status_code=403, detail="No access to the Deduplicator")
-    if (user.role or "user").strip().lower() not in _ALLOWED_ROLES:
-        raise HTTPException(status_code=403, detail="Unauthorized")
     return user
 
 
@@ -89,16 +89,25 @@ def is_admin(user: User) -> bool:
     return (user.role or "").strip().lower() == "admin"
 
 
-def _role(user: User) -> str:
-    return (user.role or "user").strip().lower()
+DEDUP_ROLES = ("annotator", "reviewer")
+
+
+def dedup_role(user: User) -> str:
+    """The user's role in the Deduplicator: "admin", "annotator" or "reviewer" (shown as
+    Adjudicator). Set apart from ``user.role`` (the Outliner's), so an Outliner reviewer
+    can annotate here; admins are admins in both."""
+    if is_admin(user):
+        return "admin"
+    role = (user.dedup_role or "").strip().lower()
+    return role if role in DEDUP_ROLES else "annotator"
 
 
 def can_annotate(user: User) -> bool:
-    """Annotators and admins take annotator slots; reviewers only adjudicate."""
-    return has_dedup_access(user) and _role(user) in ("annotator", "admin")
+    """Annotators and admins take annotator slots; adjudicators only adjudicate."""
+    return has_dedup_access(user) and dedup_role(user) in ("annotator", "admin")
 
 
 def can_adjudicate(user: User) -> bool:
-    """Reviewers (shown as "Adjudicator") and admins settle disagreements, as in the
-    Outliner; never on a pair they annotated (checked per item)."""
-    return has_dedup_access(user) and _role(user) in ("reviewer", "admin")
+    """Adjudicators and admins settle disagreements; never on a pair they annotated
+    (checked per item)."""
+    return has_dedup_access(user) and dedup_role(user) in ("reviewer", "admin")

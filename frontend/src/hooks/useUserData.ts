@@ -11,13 +11,15 @@ export interface UserFilters {
   /** Substring match on name or email (query param: search). */
   username?: string;
   role?: string;
+  /** Only users holding this permission (e.g. "dedup"). */
+  permission?: string;
 }
 
 /**
  * Hook for fetching users list with optional filters; skip/limit derived from page & pageSize.
  */
 export function useUsers(filters: UserFilters = {}) {
-  const { pageSize = DEFAULT_PAGE_SIZE, username, role } = filters;
+  const { pageSize = DEFAULT_PAGE_SIZE, username, role, permission } = filters;
 
   const search = username?.trim() || undefined;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -31,11 +33,12 @@ export function useUsers(filters: UserFilters = {}) {
     error,
     refetch,
   } = useQuery<PaginatedUserResponse>({
-    queryKey: ['users', { skip, limit: pageSize, search, role }],
+    queryKey: ['users', { skip, limit: pageSize, search, role, permission }],
     queryFn: async () => {
       const params = new URLSearchParams({ skip: String(skip), limit: String(pageSize) });
       if (search) params.append('search', search);
       if (role) params.append('role', role);
+      if (permission) params.append('permission', permission);
       const response = await fetchWithAccessToken(`/api/settings/users?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',

@@ -1,9 +1,9 @@
-import type { User } from '@/api/user';
+import type { User, UserRowUpdate } from '@/api/user';
 import AvatarWrapper from '@/components/AvatarWrapper';
 
 interface UserRowProps {
   readonly user: User;
-  readonly onUpdate: (userId: string, userData: { role?: string; permissions?: string[] }) => void;
+  readonly onUpdate: (userId: string, userData: UserRowUpdate) => void;
   readonly onDelete: (userId: string) => void;
 }
 

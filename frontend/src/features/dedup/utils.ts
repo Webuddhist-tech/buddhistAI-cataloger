@@ -8,6 +8,15 @@ const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, option
 const TIBETAN_DIGITS = '༠༡༢༣༤༥༦༧༨༩';
 
 /** A count for display: grouped digits ("136,011"), in Tibetan digits when the app is in Tibetan. */
+/**
+ * The user's role in the Deduplicator, apart from their Outliner `role`: "admin",
+ * "annotator" or "reviewer" (Adjudicator). Mirrors `dedup_role` in backend/dedup/deps.py.
+ */
+export function dedupRole(user: { role?: string | null; dedup_role?: string | null } | null | undefined) {
+  if (user?.role === 'admin') return 'admin';
+  return user?.dedup_role === 'reviewer' ? 'reviewer' : 'annotator';
+}
+
 export function formatNumber(n: number): string {
   const s = n.toLocaleString();
   return i18n.language?.startsWith('bo') ? s.replace(/\d/g, (d) => TIBETAN_DIGITS[Number(d)]) : s;

@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import type { UserRowUpdate } from '@/api/user';
 import { UsersTab } from '../components/admin';
 import { SimplePagination } from '../components/ui/simple-pagination';
 import { useUsers, useUserActions, type UserFilters } from '../hooks';
@@ -25,7 +26,7 @@ function OutlinerAdminUsers() {
 
   const handleUserUpdate = async (
     userId: string,
-    userData: { role?: string; permissions?: string[] }
+    userData: UserRowUpdate
   ) => {
     try {
       await updateUser(userId, userData);

@@ -11,7 +11,11 @@ export interface User {
   created_at: string;
   role?: string | null;
   permissions?: string[] | null;
+  /** Deduplicator role, apart from `role` (the Outliner's). Null = annotator. */
+  dedup_role?: DedupRole | null;
 }
+
+export type DedupRole = 'annotator' | 'reviewer';
 
 export interface PaginatedUserResponse {
   items: User[];
@@ -26,7 +30,11 @@ export interface UserUpdateRequest {
   picture?: string | null;
   role?: string | null;
   permissions?: string[] | null;
+  dedup_role?: DedupRole;
 }
+
+/** Fields the users admin page changes on a user. */
+export type UserRowUpdate = { role?: string; permissions?: string[]; dedup_role?: DedupRole };
 
 // ==================== API Functions ====================
 

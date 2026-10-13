@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from typing import List, Literal, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -54,6 +54,8 @@ class UserUpdate(BaseModel):
     picture: Optional[str] = None
     role: Optional[str] = None
     permissions: Optional[List[str]] = None
+    # Deduplicator role, apart from `role`: "annotator" or "reviewer" (Adjudicator).
+    dedup_role: Optional[Literal["annotator", "reviewer"]] = None
 
 
 class UserResponse(BaseModel):
@@ -64,6 +66,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     role: Optional[str]
     permissions: Optional[List[str]] = None
+    dedup_role: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -129,6 +132,7 @@ def get_users(
             picture=user.picture,
             created_at=user.created_at,
             role=user.role,
+            dedup_role=user.dedup_role,
             permissions=permissions
         ))
     
@@ -178,6 +182,7 @@ def get_current_user(
         picture=user.picture,
         created_at=user.created_at,
         role=user.role,
+        dedup_role=user.dedup_role,
         permissions=permissions,
     )
     set_user_by_email_in_cache(user.email, response.model_dump(mode="json"))
@@ -212,6 +217,7 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
         picture=user.picture,
         created_at=user.created_at,
         role=user.role,
+        dedup_role=user.dedup_role,
         permissions=permissions,
     )
     set_user_by_email_in_cache(user.email, response.model_dump(mode="json"))
@@ -243,6 +249,7 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
         picture=user.picture,
         created_at=user.created_at,
         role=user.role,
+        dedup_role=user.dedup_role,
         permissions=permissions
     )
 
@@ -307,6 +314,7 @@ def create_user(
         picture=db_user.picture,
         created_at=db_user.created_at,
         role=db_user.role,
+        dedup_role=db_user.dedup_role,
         permissions=permissions
     )
 
@@ -339,7 +347,10 @@ def update_user(user_id: str, user: UserUpdate, db: Session = Depends(get_db)):
     if user.permissions is not None:
         # Store permissions as JSON string
         db_user.permissions = json.dumps(user.permissions) if user.permissions else None
-    
+
+    if user.dedup_role is not None:
+        db_user.dedup_role = user.dedup_role
+
     db.commit()
     db.refresh(db_user)
 
@@ -365,6 +376,7 @@ def update_user(user_id: str, user: UserUpdate, db: Session = Depends(get_db)):
         picture=db_user.picture,
         created_at=db_user.created_at,
         role=db_user.role,
+        dedup_role=db_user.dedup_role,
         permissions=permissions,
     )
 

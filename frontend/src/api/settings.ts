@@ -43,7 +43,11 @@ export interface User {
   created_at: string;
   role: string;
   permissions: string[];
+  /** Deduplicator role, apart from `role` (the Outliner's). Null = annotator. */
+  dedup_role?: DedupRole | null;
 }
+
+export type DedupRole = 'annotator' | 'reviewer';
 
 /** Bootstrap current user in DB; id and email come from the access token on the server. */
 export interface UserSelfCreate {

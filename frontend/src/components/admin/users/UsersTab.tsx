@@ -1,4 +1,4 @@
-import type { User } from '@/api/user';
+import type { User, UserRowUpdate } from '@/api/user';
 import UserNameFilter from './UserNameFilter';
 import UserRoleFilter from './UserRoleFilter';
 import UserRow from './UserRow';
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 interface UsersTabProps {
   isLoading: boolean;
   users: User[];
-  onUserUpdate: (userId: string, userData: { role?: string; permissions?: string[] }) => void;
+  onUserUpdate: (userId: string, userData: UserRowUpdate) => void;
   onUserDelete: (userId: string) => void;
 }
 

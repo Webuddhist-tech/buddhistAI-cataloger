@@ -26,6 +26,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     role: Mapped[str | None] = mapped_column(String, nullable=True,default='user')
     permissions: Mapped[list[Permissions]] = mapped_column(String, nullable=True)
+    # Role in the Deduplicator, set apart from `role` (the Outliner's): "annotator" or
+    # "reviewer" (shown as Adjudicator). NULL = annotator. Admins are admins in both.
+    dedup_role: Mapped[str | None] = mapped_column(String, nullable=True)
     memberships = relationship("TenantMembership", back_populates="user")
 
 

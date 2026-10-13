@@ -38,6 +38,7 @@ const DedupAdminOverviewLazy = lazy(() => import('@/features/dedup').then((m) =>
 const DedupAdminAnnotatorsLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAnnotators })));
 const DedupAdminAnnotatorLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAnnotator })));
 const DedupAdminAdjudicationsLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAdjudications })));
+const DedupAdminUsersLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminUsers })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -206,6 +207,13 @@ function App() {
             <ProtectedRoute>
               <DedupAdminLayoutLazy>
                 <DedupAdminAdjudicationsLazy />
+              </DedupAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup-admin/users" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy>
+                <DedupAdminUsersLazy />
               </DedupAdminLayoutLazy>
             </ProtectedRoute>
           } />
