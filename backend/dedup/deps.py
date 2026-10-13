@@ -1,8 +1,8 @@
 """Auth dependency for dedup routes.
 
 Independent of the Outliner: access is the ``dedup`` permission, and the user's part here
-(annotator / adjudicator) is ``users.dedup_role``, not the Outliner ``users.role``. Only
-"admin" is shared by both tools.
+(annotator / adjudicator / admin) is ``users.dedup_role``. The Outliner ``users.role`` plays
+no part, admin included.
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def require_dedup_access(
 def require_dedup_admin(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
-    """Admins manage the dedup work without needing the annotator permission themselves."""
+    """Deduplicator admins manage the dedup work and its users."""
     user = _user_from_token(creds)
     if not is_admin(user):
         raise HTTPException(status_code=403, detail="Admins only")
@@ -86,18 +86,17 @@ def require_dedup_admin(
 
 
 def is_admin(user: User) -> bool:
-    return (user.role or "").strip().lower() == "admin"
+    """A Deduplicator admin. Not the same as an Outliner admin (``user.role``)."""
+    return has_dedup_access(user) and dedup_role(user) == "admin"
 
 
-DEDUP_ROLES = ("annotator", "reviewer")
+DEDUP_ROLES = ("annotator", "reviewer", "admin")
 
 
 def dedup_role(user: User) -> str:
-    """The user's role in the Deduplicator: "admin", "annotator" or "reviewer" (shown as
-    Adjudicator). Set apart from ``user.role`` (the Outliner's), so an Outliner reviewer
-    can annotate here; admins are admins in both."""
-    if is_admin(user):
-        return "admin"
+    """The user's role in the Deduplicator: "annotator", "reviewer" (shown as Adjudicator)
+    or "admin". Fully apart from ``user.role`` (the Outliner's): an Outliner reviewer can
+    annotate here, an Outliner admin need not be an admin here. NULL = annotator."""
     role = (user.dedup_role or "").strip().lower()
     return role if role in DEDUP_ROLES else "annotator"
 

@@ -13,13 +13,15 @@ export interface UserFilters {
   role?: string;
   /** Only users holding this permission (e.g. "dedup"). */
   permission?: string;
+  /** Only Deduplicator users with this dedup role. */
+  dedupRole?: 'annotator' | 'reviewer' | 'admin';
 }
 
 /**
  * Hook for fetching users list with optional filters; skip/limit derived from page & pageSize.
  */
 export function useUsers(filters: UserFilters = {}) {
-  const { pageSize = DEFAULT_PAGE_SIZE, username, role, permission } = filters;
+  const { pageSize = DEFAULT_PAGE_SIZE, username, role, permission, dedupRole } = filters;
 
   const search = username?.trim() || undefined;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,12 +35,13 @@ export function useUsers(filters: UserFilters = {}) {
     error,
     refetch,
   } = useQuery<PaginatedUserResponse>({
-    queryKey: ['users', { skip, limit: pageSize, search, role, permission }],
+    queryKey: ['users', { skip, limit: pageSize, search, role, permission, dedupRole }],
     queryFn: async () => {
       const params = new URLSearchParams({ skip: String(skip), limit: String(pageSize) });
       if (search) params.append('search', search);
       if (role) params.append('role', role);
       if (permission) params.append('permission', permission);
+      if (dedupRole) params.append('dedup_role', dedupRole);
       const response = await fetchWithAccessToken(`/api/settings/users?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',

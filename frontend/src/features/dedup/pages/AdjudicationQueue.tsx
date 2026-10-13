@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AdjudicationItem, AnnotatorAnswer, MyItemsState } from '../api/review';
 import { useAdjudicationQueue, useBatchName } from '../hooks/useReview';
-import { answerLabel, formatDateTime, formatNumber, verdictLabel } from '../utils';
+import { answerLabel, formatDateTime, formatNumber, isDedupAdmin, verdictLabel } from '../utils';
 
 const STATE_TABS: MyItemsState[] = ['open', 'done', 'all'];
 
@@ -103,7 +103,7 @@ export default function AdjudicationQueue() {
             {t('dedup.adjudicationQueue.subtitle')}
           </p>
         </div>
-        {user?.role === 'admin' && (
+        {isDedupAdmin(user) && (
           <Button asChild variant="outline" className="cursor-pointer">
             <Link to="/dedup">
               <ListChecks className="h-4 w-4" /> {t('dedup.review.myItems')}

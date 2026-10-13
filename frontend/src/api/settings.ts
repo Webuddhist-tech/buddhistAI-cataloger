@@ -47,7 +47,7 @@ export interface User {
   dedup_role?: DedupRole | null;
 }
 
-export type DedupRole = 'annotator' | 'reviewer';
+export type DedupRole = 'annotator' | 'reviewer' | 'admin';
 
 /** Bootstrap current user in DB; id and email come from the access token on the server. */
 export interface UserSelfCreate {

@@ -1218,27 +1218,22 @@
         "users": "Users"
       },
       "users": {
-        "subtitle": "Who can use the Deduplicator, and as annotator or adjudicator. Separate from Outliner roles.",
-        "show": {
-          "access": "With dedup access",
-          "all": "All users"
+        "subtitle": "Manage Deduplicator roles and access. Separate from Outliner roles.",
+        "allRoles": "All Roles",
+        "applyFilters": "Apply Filters",
+        "role": {
+          "annotator": "Annotator",
+          "reviewer": "Adjudicator",
+          "admin": "Admin"
         },
-        "search": "Search name or email",
         "col": {
           "user": "User",
-          "access": "Dedup access",
-          "role": "Dedup role"
+          "role": "Role",
+          "access": "Access",
+          "created": "Created"
         },
-        "hasAccess": "Yes",
-        "noAccess": "No",
-        "roleAnnotator": "Annotator",
-        "roleAdjudicator": "Adjudicator",
-        "roleAdmin": "Admin",
-        "adminNote": "Admins are admins in both tools.",
-        "empty": "No users found.",
-        "count_one": "{{count}} user · page {{page}}",
-        "count_other": "{{count}} users · page {{page}}",
-        "saved": "Updated {{name}}",
+        "dedup": "Dedup",
+        "empty": "No users found",
         "saveFailed": "Could not update: {{error}}"
       },
       "adminsOnly": "Admins only.",

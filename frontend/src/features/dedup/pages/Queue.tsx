@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdjudicationQueue, useBatchName, useClaimItems, useMyItems } from '../hooks/useReview';
-import { dedupRole, formatNumber, hasIssue, isDecided, verdictLabel } from '../utils';
+import { dedupRole, formatNumber, hasIssue, isDecided, isDedupAdmin, verdictLabel } from '../utils';
 
 // "To do" only, like the outliner list: answered pairs drop out once submitted, so the
 // list shows just the work left. Annotators asked not to see finished work here; add
@@ -44,7 +44,7 @@ export default function Queue() {
   const [q, setQ] = useState('');
   // Reviewers are the Deduplicator's adjudicators: they have no annotation work.
   const isReviewer = dedupRole(user) === 'reviewer';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isDedupAdmin(user);
 
   const items = useMyItems(state, undefined, !isReviewer);
   const openItems = useMyItems('open', undefined, !isReviewer);

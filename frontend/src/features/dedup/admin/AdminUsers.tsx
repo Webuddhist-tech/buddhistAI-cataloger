@@ -3,47 +3,53 @@ import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SimplePagination } from '@/components/ui/simple-pagination';
 import AvatarWrapper from '@/components/AvatarWrapper';
+import UserNameFilter from '@/components/admin/users/UserNameFilter';
 import type { DedupRole, User, UserRowUpdate } from '@/api/user';
 import { useUserActions, useUsers } from '@/hooks';
 import { reviewQueryKeyRoot } from '../hooks/useReview';
-import { dedupRole } from '../utils';
+import { dedupRole, hasDedupAccess } from '../utils';
 
 const PAGE_SIZE = 20;
-type Show = 'access' | 'all';
+const ROLES: DedupRole[] = ['annotator', 'reviewer', 'admin'];
 
-// Who may use the Deduplicator and as what. Kept apart from the Outliner's users page:
-// only dedup access and the dedup role are changed here, never the Outliner role.
+// The Outliner's users page, for the Deduplicator: the dedup role and dedup access, each
+// changed on its own (as the Outliner's role and permissions are). Never the Outliner role.
 export default function AdminUsers() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [, setSearchParams] = useSearchParams();
-  const [show, setShow] = useState<Show>('access');
-  const [q, setQ] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const roleParam = searchParams.get('role');
+  const role = ROLES.includes(roleParam as DedupRole) ? (roleParam as DedupRole) : 'all';
+  const username = searchParams.get('username') || '';
+  const [draftRole, setDraftRole] = useState<string>(role);
+  const [draftUsername, setDraftUsername] = useState(username);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setSearch(q.trim()), 300);
-    return () => window.clearTimeout(id);
-  }, [q]);
+    setDraftRole(role);
+    setDraftUsername(username);
+  }, [role, username]);
 
-  // A new filter starts from the first page.
-  useEffect(() => {
-    setSearchParams(
-      (p) => {
-        p.delete('page');
-        return p;
-      },
-      { replace: true },
-    );
-  }, [search, show, setSearchParams]);
+  const applyFilters = () => {
+    setSearchParams((params) => {
+      if (draftRole === 'all') params.delete('role');
+      else params.set('role', draftRole);
+      const name = draftUsername.trim();
+      if (name) params.set('username', name);
+      else params.delete('username');
+      params.set('page', '1');
+      return params;
+    });
+  };
+  const isApplyDisabled = draftRole === role && draftUsername.trim() === username.trim();
 
-  const { users, total, isLoading, isFetching, hasNextPage, hasPrevPage, handleNextPage, handlePrevPage, page } = useUsers({
+  const { users, isLoading, isFetching, hasNextPage, hasPrevPage, handleNextPage, handlePrevPage } = useUsers({
     pageSize: PAGE_SIZE,
-    username: search || undefined,
-    permission: show === 'access' ? 'dedup' : undefined,
+    username: username || undefined,
+    dedupRole: role === 'all' ? undefined : role,
   });
   const { updateUser } = useUserActions();
 
@@ -52,137 +58,126 @@ export default function AdminUsers() {
       await updateUser(user.id, data);
       // Annotator lists and adjudicator pickers on the other admin pages.
       void queryClient.invalidateQueries({ queryKey: [...reviewQueryKeyRoot, 'admin'] });
-      toast.success(t('dedup.admin.users.saved', { name: user.name || user.email }));
     } catch (e) {
       toast.error(t('dedup.admin.users.saveFailed', { error: (e as Error).message }));
     }
   };
 
   const setAccess = (user: User, on: boolean) => {
-    const current = user.permissions ?? [];
-    const permissions = on ? [...new Set([...current, 'dedup'])] : current.filter((p) => p !== 'dedup');
-    void update(user, { permissions });
+    const others = (user.permissions ?? []).filter((p) => p !== 'dedup');
+    void update(user, { permissions: on ? [...others, 'dedup'] : others });
   };
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.admin.nav.users')}</h1>
-      <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.users.subtitle')}</p>
-
-      <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
-          {(['access', 'all'] as const).map((k) => (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={show === k}
-              onClick={() => setShow(k)}
-              className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-colors ${
-                show === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {t(`dedup.admin.users.show.${k}`)}
-            </button>
-          ))}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.admin.nav.users')}</h1>
+          <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.users.subtitle')}</p>
         </div>
-        <Input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t('dedup.admin.users.search')}
-          className="w-full sm:w-72"
-        />
+        <div className="flex flex-wrap items-center gap-4">
+          <UserNameFilter value={draftUsername} onChange={setDraftUsername} />
+          <Select value={draftRole} onValueChange={setDraftRole}>
+            <SelectTrigger className="w-full max-w-48">
+              <SelectValue placeholder={t('dedup.admin.users.allRoles')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('dedup.admin.users.allRoles')}</SelectItem>
+              {ROLES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {t(`dedup.admin.users.role.${r}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button disabled={isApplyDisabled} onClick={applyFilters}>
+            {t('dedup.admin.users.applyFilters')}
+          </Button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+      <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 font-medium">{t('dedup.admin.users.col.user')}</th>
-              <th className="px-4 py-3 font-medium">{t('dedup.admin.users.col.access')}</th>
-              <th className="px-4 py-3 font-medium">{t('dedup.admin.users.col.role')}</th>
+              {(['user', 'role', 'access', 'created'] as const).map((c) => (
+                <th key={c} className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t(`dedup.admin.users.col.${c}`)}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-200 bg-white">
             {isLoading &&
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={3} className="px-4 py-3">
+                  <td colSpan={4} className="px-6 py-3">
                     <div className="h-9 animate-pulse rounded bg-gray-100" />
                   </td>
                 </tr>
               ))}
+            {!isLoading && users.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
+                  {t('dedup.admin.users.empty')}
+                </td>
+              </tr>
+            )}
             {users.map((u) => (
-              <UserLine key={u.id} user={u} onAccess={(on) => setAccess(u, on)} onRole={(dedup_role) => void update(u, { dedup_role })} />
+              <tr key={u.id} className="hover:bg-gray-50">
+                <td className="whitespace-nowrap px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    {u.picture && <AvatarWrapper src={u.picture} alt={u.name || u.email} />}
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{u.name || 'No name'}</div>
+                      <div className="text-sm text-gray-500">{u.email}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <select
+                    value={dedupRole(u)}
+                    onChange={(e) => void update(u, { dedup_role: e.target.value as DedupRole })}
+                    className="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {t(`dedup.admin.users.role.${r}`)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <label className="flex cursor-pointer items-center text-sm">
+                    <input
+                      type="checkbox"
+                      checked={hasDedupAccess(u)}
+                      onChange={(e) => setAccess(u, e.target.checked)}
+                      className="mr-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-gray-700">{t('dedup.admin.users.dedup')}</span>
+                  </label>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  {new Date(u.created_at).toLocaleDateString()}
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
-        {!isLoading && users.length === 0 && (
-          <p className="py-12 text-center text-sm text-gray-500">{t('dedup.admin.users.empty')}</p>
-        )}
       </div>
 
-      <SimplePagination
-        className="mt-3"
-        canGoPrev={hasPrevPage}
-        canGoNext={hasNextPage}
-        onPrev={handlePrevPage}
-        onNext={handleNextPage}
-        isDisabled={isFetching}
-        labelPosition="left"
-        label={<span className="text-sm text-gray-600">{t('dedup.admin.users.count', { count: total, page })}</span>}
-      />
+      {(hasPrevPage || hasNextPage) && (
+        <SimplePagination
+          className="mt-4"
+          canGoPrev={hasPrevPage}
+          canGoNext={hasNextPage}
+          onPrev={handlePrevPage}
+          onNext={handleNextPage}
+          label=""
+          isDisabled={isFetching}
+        />
+      )}
     </div>
-  );
-}
-
-function UserLine({
-  user,
-  onAccess,
-  onRole,
-}: Readonly<{ user: User; onAccess: (on: boolean) => void; onRole: (role: DedupRole) => void }>) {
-  const { t } = useTranslation();
-  const hasAccess = user.permissions?.includes('dedup') ?? false;
-  const role = dedupRole(user);
-  return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          {user.picture && <AvatarWrapper src={user.picture} alt={user.name || user.email} />}
-          <div className="min-w-0">
-            <div className="truncate font-medium text-gray-900">{user.name || user.email}</div>
-            {user.name && <div className="truncate text-xs text-gray-500">{user.email}</div>}
-          </div>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <label className="inline-flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={hasAccess}
-            onChange={(e) => onAccess(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-gray-700">{t(hasAccess ? 'dedup.admin.users.hasAccess' : 'dedup.admin.users.noAccess')}</span>
-        </label>
-      </td>
-      <td className="px-4 py-3">
-        {role === 'admin' ? (
-          <span className="text-gray-800" title={t('dedup.admin.users.adminNote')}>
-            {t('dedup.admin.users.roleAdmin')}
-          </span>
-        ) : (
-          <select
-            value={role}
-            disabled={!hasAccess}
-            onChange={(e) => onRole(e.target.value as DedupRole)}
-            className="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="annotator">{t('dedup.admin.users.roleAnnotator')}</option>
-            <option value="reviewer">{t('dedup.admin.users.roleAdjudicator')}</option>
-          </select>
-        )}
-      </td>
-    </tr>
   );
 }
