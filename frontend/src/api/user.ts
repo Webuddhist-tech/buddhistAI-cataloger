@@ -15,7 +15,7 @@ export interface User {
   dedup_role?: DedupRole | null;
 }
 
-export type DedupRole = 'annotator' | 'reviewer';
+export type DedupRole = 'annotator' | 'reviewer' | 'admin';
 
 export interface PaginatedUserResponse {
   items: User[];

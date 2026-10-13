@@ -7,6 +7,7 @@ import { ChevronDown, Settings } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { Button } from '@/components/ui/button';
 import AvatarWrapper from '@/components/AvatarWrapper';
+import { isDedupAdmin } from '@/features/dedup/utils';
 
 
 function Navigation() {
@@ -62,11 +63,12 @@ function Navigation() {
 
   const isActive = (path: string) => location.pathname === path;
   const isAdminOrReviewer = userFromDb?.role === 'admin' || userFromDb?.role === 'reviewer';
-  // Admin areas this user can open: the Outliner's (admins and reviewers) and the
-  // Deduplicator's (admins). With both, "Admin" expands; with one, it links straight there.
+  // Admin areas this user can open: the Outliner's (its admins and reviewers) and the
+  // Deduplicator's (its own admins, set apart). With both, "Admin" expands; with one, it
+  // links straight there.
   const adminAreas = [
     ...(isAdminOrReviewer ? [{ to: '/outliner-admin', label: 'Outliner' }] : []),
-    ...(userFromDb?.role === 'admin' ? [{ to: '/dedup-admin', label: 'Deduplicator' }] : []),
+    ...(isDedupAdmin(userFromDb) ? [{ to: '/dedup-admin', label: 'Deduplicator' }] : []),
   ];
   const primaryRgb = hexToRgb(primaryColor);
   const getActiveStyle = (isActiveLink: boolean) => {

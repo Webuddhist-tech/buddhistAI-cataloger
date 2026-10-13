@@ -7,16 +7,27 @@ const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, option
 
 const TIBETAN_DIGITS = '༠༡༢༣༤༥༦༧༨༩';
 
-/** A count for display: grouped digits ("136,011"), in Tibetan digits when the app is in Tibetan. */
+type DedupUser = { permissions?: string[] | null; dedup_role?: string | null } | null | undefined;
+
 /**
- * The user's role in the Deduplicator, apart from their Outliner `role`: "admin",
- * "annotator" or "reviewer" (Adjudicator). Mirrors `dedup_role` in backend/dedup/deps.py.
+ * The user's role in the Deduplicator: "annotator", "reviewer" (Adjudicator) or "admin".
+ * Fully apart from their Outliner `role`. Mirrors `dedup_role` in backend/dedup/deps.py.
  */
-export function dedupRole(user: { role?: string | null; dedup_role?: string | null } | null | undefined) {
-  if (user?.role === 'admin') return 'admin';
-  return user?.dedup_role === 'reviewer' ? 'reviewer' : 'annotator';
+export function dedupRole(user: DedupUser): 'annotator' | 'reviewer' | 'admin' {
+  const r = user?.dedup_role;
+  return r === 'reviewer' || r === 'admin' ? r : 'annotator';
 }
 
+export function hasDedupAccess(user: DedupUser): boolean {
+  return user?.permissions?.includes('dedup') ?? false;
+}
+
+/** A Deduplicator admin, which is not the same as an Outliner admin. */
+export function isDedupAdmin(user: DedupUser): boolean {
+  return hasDedupAccess(user) && dedupRole(user) === 'admin';
+}
+
+/** A count for display: grouped digits ("136,011"), in Tibetan digits when the app is in Tibetan. */
 export function formatNumber(n: number): string {
   const s = n.toLocaleString();
   return i18n.language?.startsWith('bo') ? s.replace(/\d/g, (d) => TIBETAN_DIGITS[Number(d)]) : s;

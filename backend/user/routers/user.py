@@ -54,8 +54,8 @@ class UserUpdate(BaseModel):
     picture: Optional[str] = None
     role: Optional[str] = None
     permissions: Optional[List[str]] = None
-    # Deduplicator role, apart from `role`: "annotator" or "reviewer" (Adjudicator).
-    dedup_role: Optional[Literal["annotator", "reviewer"]] = None
+    # Deduplicator role, apart from `role`: "annotator", "reviewer" (Adjudicator) or "admin".
+    dedup_role: Optional[Literal["annotator", "reviewer", "admin"]] = None
 
 
 class UserResponse(BaseModel):
@@ -86,9 +86,11 @@ def get_users(
     role: Optional[str] = None,
     permission: Optional[str] = None,
     search: Optional[str] = None,
+    dedup_role: Optional[Literal["annotator", "reviewer", "admin"]] = None,
     db: Session = Depends(get_db)
 ):
-    """Get all users with pagination, optionally filtered by role, permission, and name/email search."""
+    """Get all users with pagination, optionally filtered by role, permission, Deduplicator
+    role (implies dedup access), and name/email search."""
     query = db.query(User)
 
     if role:
@@ -96,6 +98,14 @@ def get_users(
 
     if permission:
         query = query.filter(User.permissions.contains(permission))
+
+    if dedup_role:
+        query = query.filter(User.permissions.contains("dedup"))
+        if dedup_role == "annotator":
+            # NULL is the default: annotator.
+            query = query.filter(or_(User.dedup_role.is_(None), User.dedup_role == "annotator"))
+        else:
+            query = query.filter(User.dedup_role == dedup_role)
 
     if search and search.strip():
         term = f"%{search.strip()}%"

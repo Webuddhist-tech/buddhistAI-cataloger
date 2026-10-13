@@ -4,6 +4,7 @@ import { AlertTriangle, Gavel, LayoutDashboard, UserCog, Users } from 'lucide-re
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@/hooks/useUser';
 import { useDedupSettings } from '../hooks/useReview';
+import { isDedupAdmin } from '../utils';
 
 const LINKS = [
   { to: '/dedup-admin/overview', label: 'dedup.admin.nav.overview', icon: LayoutDashboard },
@@ -15,11 +16,12 @@ const LINKS = [
 export default function DedupAdminLayout({ children }: Readonly<{ children: ReactNode }>) {
   const { t } = useTranslation();
   const { user, isLoading } = useUser();
-  const settings = useDedupSettings(user?.role === 'admin');
+  const admin = isDedupAdmin(user);
+  const settings = useDedupSettings(admin);
   const single = settings.data?.review_mode === 'single';
 
   if (isLoading) return null;
-  if (user?.role !== 'admin') {
+  if (!admin) {
     return <p className="py-24 text-center text-sm text-gray-500">{t('dedup.admin.adminsOnly')}</p>;
   }
 
