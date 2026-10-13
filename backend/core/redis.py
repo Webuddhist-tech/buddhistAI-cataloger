@@ -16,7 +16,9 @@ REDIS_URL = os.getenv("REDIS_URL", None)
 EXPIRE_TIME = int(os.getenv("EXPIRE_TIME", 172800))
 # Redis key prefix for document content
 DOCUMENT_CONTENT_KEY_PREFIX = "outliner:document:content:"
-USER_BY_EMAIL_KEY_PREFIX = "user:by_email:"
+# Versioned: bump when UserResponse gains a field (v2: dedup_role), so profiles cached in
+# the old shape are not served for the rest of their 20 days.
+USER_BY_EMAIL_KEY_PREFIX = "user:by_email:v2:"
 # 20 days
 USER_BY_EMAIL_TTL_SECONDS = 20 * 24 * 60 * 60
 

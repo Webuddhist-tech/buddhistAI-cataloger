@@ -14,6 +14,8 @@ import { reviewQueryKeyRoot } from '../hooks/useReview';
 import { dedupRole, hasDedupAccess } from '../utils';
 
 const PAGE_SIZE = 20;
+const TH = 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 sm:px-6';
+const TD = 'px-4 py-3 align-middle sm:px-6';
 const ROLES: DedupRole[] = ['annotator', 'reviewer', 'admin'];
 
 // The Outliner's users page, for the Deduplicator: the dedup role and dedup access, each
@@ -70,41 +72,46 @@ export default function AdminUsers() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.admin.nav.users')}</h1>
-          <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.users.subtitle')}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
+      <h1 className="text-2xl font-semibold text-gray-900">{t('dedup.admin.nav.users')}</h1>
+      <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.users.subtitle')}</p>
+
+      {/* One filter bar: stacks on a phone, one line from sm up. Enter in the search applies. */}
+      <form
+        className="mt-6 mb-4 flex flex-col gap-2 sm:flex-row sm:items-center"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!isApplyDisabled) applyFilters();
+        }}
+      >
+        <div className="sm:w-72 [&>div]:w-full [&>div]:max-w-none">
           <UserNameFilter value={draftUsername} onChange={setDraftUsername} />
-          <Select value={draftRole} onValueChange={setDraftRole}>
-            <SelectTrigger className="w-full max-w-48">
-              <SelectValue placeholder={t('dedup.admin.users.allRoles')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('dedup.admin.users.allRoles')}</SelectItem>
-              {ROLES.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {t(`dedup.admin.users.role.${r}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button disabled={isApplyDisabled} onClick={applyFilters}>
-            {t('dedup.admin.users.applyFilters')}
-          </Button>
         </div>
-      </div>
+        <Select value={draftRole} onValueChange={setDraftRole}>
+          <SelectTrigger className="h-9 w-full sm:w-44">
+            <SelectValue placeholder={t('dedup.admin.users.allRoles')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('dedup.admin.users.allRoles')}</SelectItem>
+            {ROLES.map((r) => (
+              <SelectItem key={r} value={r}>
+                {t(`dedup.admin.users.role.${r}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button type="submit" className="h-9" disabled={isApplyDisabled}>
+          {t('dedup.admin.users.applyFilters')}
+        </Button>
+      </form>
 
       <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {(['user', 'role', 'access', 'created'] as const).map((c) => (
-                <th key={c} className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t(`dedup.admin.users.col.${c}`)}
-                </th>
-              ))}
+              <th className={`${TH} w-full`}>{t('dedup.admin.users.col.user')}</th>
+              <th className={TH}>{t('dedup.admin.users.col.role')}</th>
+              <th className={TH}>{t('dedup.admin.users.col.access')}</th>
+              <th className={`${TH} hidden md:table-cell`}>{t('dedup.admin.users.col.created')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 bg-white">
@@ -125,16 +132,19 @@ export default function AdminUsers() {
             )}
             {users.map((u) => (
               <tr key={u.id} className="hover:bg-gray-50">
-                <td className="whitespace-nowrap px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    {u.picture && <AvatarWrapper src={u.picture} alt={u.name || u.email} />}
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{u.name || 'No name'}</div>
-                      <div className="text-sm text-gray-500">{u.email}</div>
+                {/* max-w-0 + w-full: this column takes the spare width and truncates, the rest stay compact. */}
+                <td className={`${TD} w-full max-w-0`}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="shrink-0">
+                      {u.picture && <AvatarWrapper src={u.picture} alt={u.name || u.email} />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-gray-900">{u.name || u.email}</div>
+                      {u.name && <div className="truncate text-sm text-gray-500">{u.email}</div>}
                     </div>
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-6 py-4">
+                <td className={`${TD} whitespace-nowrap`}>
                   <select
                     value={dedupRole(u)}
                     onChange={(e) => void update(u, { dedup_role: e.target.value as DedupRole })}
@@ -147,7 +157,7 @@ export default function AdminUsers() {
                     ))}
                   </select>
                 </td>
-                <td className="whitespace-nowrap px-6 py-4">
+                <td className={`${TD} whitespace-nowrap`}>
                   <label className="flex cursor-pointer items-center text-sm">
                     <input
                       type="checkbox"
@@ -158,7 +168,7 @@ export default function AdminUsers() {
                     <span className="text-gray-700">{t('dedup.admin.users.dedup')}</span>
                   </label>
                 </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                <td className={`${TD} hidden whitespace-nowrap text-sm text-gray-500 md:table-cell`}>
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
               </tr>
