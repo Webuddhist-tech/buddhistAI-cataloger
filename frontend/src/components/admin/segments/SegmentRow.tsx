@@ -39,6 +39,7 @@ import { ReviewerChangeBadges } from '@/components/outliner/ReviewerChangeBadges
 import { findAllOccurrences } from '@/features/outliner';
 import { getSegmentHighlightWords } from '@/utils/segmentHighlightWords';
 import { SegmentAttributionBar } from './SegmentAttributionBar';
+import { useDocumentSegmentNav } from './DocumentSegmentNavContext';
 import { MarkedTextChips } from './MarkedTextChips';
 import { normalizeMarks, toMarkedSpans, type DraftMark } from './markedSpans';
 import AdminSanityFindingIndicator from './AdminSanityFindingIndicator';
@@ -71,6 +72,46 @@ interface SegmentRowProps {
   readonly documentContent?: string;
   /** Next segment in document order, for the reviewer's "Merge with next". */
   readonly nextSegment?: Segment;
+}
+
+/**
+ * "Reconstructed" flag on the title: a toggle pill for the reviewer, yellow when on.
+ * Read-only viewers only see it when it is on.
+ */
+function ReconstructedToggle({
+  checked,
+  editable,
+  hint,
+  onChange,
+}: {
+  readonly checked: boolean;
+  readonly editable: boolean;
+  readonly hint: string;
+  readonly onChange: (checked: boolean) => void;
+}) {
+  const onClass = 'bg-yellow-100 text-yellow-800 border-yellow-300';
+  if (!editable) {
+    if (!checked) return null;
+    return (
+      <span title={hint} className={`shrink-0 self-start rounded-full border px-2 py-0.5 text-xs font-medium ${onClass}`}>
+        Reconstructed
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={checked}
+      title={hint}
+      onClick={() => onChange(!checked)}
+      className={`shrink-0 self-start inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+        checked ? `${onClass} hover:bg-yellow-200` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+      }`}
+    >
+      {checked ? <Check className="w-3 h-3" aria-hidden /> : <span className="w-3 h-3 rounded-sm border border-gray-400" aria-hidden />}
+      Reconstructed
+    </button>
+  );
 }
 
 /** null = no reviewer suggestion in DB; '' = explicit empty; else trimmed text. */
@@ -107,6 +148,7 @@ function SegmentRow({
 }: SegmentRowProps) {
   const { documentId } = useParams<{ documentId: string }>();
   const queryClient = useQueryClient();
+  const { setActiveSegmentId, requestScrollToSegment } = useDocumentSegmentNav();
   const { user: reviewerAccount, isLoading: reviewerAccountLoading } = useUser();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectComment, setRejectComment] = useState('');
@@ -241,9 +283,22 @@ function SegmentRow({
     queryClient.invalidateQueries({ queryKey: ['outliner-admin-document', documentId] });
     toast.success(message);
   };
+  // After a split the reviewer works on the new segment next: open it and bring it into view.
+  // This segment keeps its id; the new one is right after it in document order.
+  const openSplitOffSegment = async () => {
+    toast.success('Segment split — the new segment is credited to you');
+    const docKey = ['outliner-admin-document', documentId];
+    await queryClient.invalidateQueries({ queryKey: docKey });
+    const doc = queryClient.getQueryData<{ segments?: Segment[] }>(docKey);
+    const newSegment = doc?.segments?.find((s) => s.segment_index === segment.segment_index + 1);
+    if (!newSegment) return;
+    onToggleExpansion(newSegment.id);
+    setActiveSegmentId(newSegment.id);
+    requestScrollToSegment(newSegment.id);
+  };
   const splitMutation = useMutation({
     mutationFn: (splitPosition: number) => splitSegment(segment.id, splitPosition, documentId),
-    onSuccess: () => restructureSuccess('Segment split — the new segment is credited to you'),
+    onSuccess: openSplitOffSegment,
     onError: (error: Error) => toast.error(`Failed to split segment: ${error.message}`),
   });
   const mergeMutation = useMutation({
@@ -308,6 +363,24 @@ function SegmentRow({
     return '';
   });
 
+
+  // Same flag as the annotator's "reconstructed" checkbox: title is not found in the text.
+  // Shown from local state so the toggle is instant; the document refetch can take a while.
+  const [suppliedTitleChecked, setSuppliedTitleChecked] = useState(segment.is_supplied_title ?? false);
+  useEffect(() => {
+    setSuppliedTitleChecked(segment.is_supplied_title ?? false);
+  }, [segment.is_supplied_title]);
+  const { mutate: patchSuppliedTitle } = useMutation({
+    mutationFn: (checked: boolean) => updateSegment(segment.id, { is_supplied_title: checked }),
+    onMutate: (checked) => setSuppliedTitleChecked(checked),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['outliner-admin-document', documentId] });
+    },
+    onError: (error: Error, checked) => {
+      setSuppliedTitleChecked(!checked);
+      toast.error(`Failed to update reconstructed title: ${error.message}`);
+    },
+  });
 
   const { mutate: patchTitleOrAuthor, isPending: titleAuthorSaving } = useMutation({
     mutationFn: (payload: { reviewer_title?: string | null; reviewer_author?: string | null }) =>
@@ -695,11 +768,6 @@ function SegmentRow({
   const annotatorTitle = (
     <span className="flex items-center gap-2 text-xl">
       {segment.title?.trim() ? segment.title : '— No annotator title —'}
-      {segment.is_supplied_title && (
-        <span className="h-min shrink-0 inline-block px-2 py-0.5 rounded-full text-base font-medium bg-yellow-100 text-yellow-800 border border-yellow-300">
-          Supplied title
-        </span>
-      )}
     </span>
   );
   return (
@@ -995,6 +1063,12 @@ function SegmentRow({
                   </div>
                 )}
               </span>
+              <ReconstructedToggle
+                checked={suppliedTitleChecked}
+                editable={canEditReview}
+                hint="Title is not in the text: written in from the cover, front matter, or elsewhere"
+                onChange={patchSuppliedTitle}
+              />
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-gray-500 flex gap-1 items-center">
