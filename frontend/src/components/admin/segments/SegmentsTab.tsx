@@ -4,11 +4,11 @@ import { SplitPane, Pane } from 'react-split-pane';
 import { EllipsisVertical, PanelRightClose, PanelRightOpen, Undo } from 'lucide-react';
 import {
   List,
-  useDynamicRowHeight,
   useListRef,
   type RowComponentProps,
 } from 'react-window';
 import { useDocumentSegmentNav, useScrollRequest } from './DocumentSegmentNavContext';
+import { useSegmentRowHeight } from './useSegmentRowHeight';
 import type { Document, Segment } from '../shared/types';
 import type { SanityCheckFinding } from '@/api/outliner';
 import SegmentRow from './SegmentRow';
@@ -144,10 +144,7 @@ function SegmentsTab({
     for (let i = 0; i < ordered.length - 1; i++) map.set(ordered[i].id, ordered[i + 1]);
     return map;
   }, [segments]);
-  const virtualListKey = useMemo(
-    () => filteredSegments.map((s) => s.id).join('\0'),
-    [filteredSegments]
-  );
+  const filteredSegmentIds = useMemo(() => filteredSegments.map((s) => s.id), [filteredSegments]);
 
   useEffect(() => {
     if (!scrollRequest || handledScrollNonce.current === scrollRequest.nonce) return;
@@ -208,10 +205,8 @@ function SegmentsTab({
     []
   );
 
-  const rowHeight = useDynamicRowHeight({
-    defaultRowHeight: 220,
-    key: virtualListKey,
-  });
+  // Heights are remembered per segment, so a split or merge doesn't throw the list off its place.
+  const rowHeight = useSegmentRowHeight(filteredSegmentIds);
 
   const statusCounts = useMemo(() => {
     const counts = { unchecked: 0, checked: 0, approved: 0, rejected: 0 };

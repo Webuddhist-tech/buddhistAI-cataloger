@@ -178,6 +178,7 @@ def enforce_segment_review_patch_authorization(
         "author",
         "title_bdrc_id",
         "author_bdrc_id",
+        "is_supplied_title",
     }
     if patch.keys() & segment_keys:
         assert_assigned_document_participant(
