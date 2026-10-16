@@ -19,6 +19,7 @@ from bdrc.volume import (
 )
 
 from core.database import SessionLocal
+from outliner.controller.group import group_for_new_volume
 from outliner.models.outliner import OutlinerDocument
 from outliner.repository import bdrc_sync_queue
 from outliner.repository import outliner_repository as outliner_repo
@@ -35,6 +36,7 @@ from outliner.controller.sanity_check import (
     segments_for_sanity_check,
 )
 from outliner.models.segment_enums import SegmentLabels
+from user.models.user import User
 
 # BDRC part_type derived purely from the annotator's segment label - unlabeled defaults
 # to "text". Note BDRC rejects part_type="text" without a non-empty wa_id, so a
@@ -98,11 +100,16 @@ def _validate_document_has_bdrc_volume(document: OutlinerDocument) -> None:
         )
 
 
-async def assign_volume(db: Session, user_id: str) -> OutlinerDocument:
-    """Assign a volume to a document"""
-    volume_data = await get_new_volume()
+async def assign_volume(db: Session, user: User, group_id: Optional[str] = None) -> OutlinerDocument:
+    """Give the user the next volume from their group's batch, as a new document."""
+    group = group_for_new_volume(db, user, group_id)
+    user_id = user.id
+    volume_data = await get_new_volume(group.batch_id)
     if volume_data is None:
-        raise HTTPException(status_code=400, detail="No volume found")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No volumes left in batch {group.batch_id} for group {group.name!r}. Ask an admin to link the next batch.",
+        )
     chunks = volume_data["chunks"]
     text = ""
     for chunk in chunks:
@@ -124,6 +131,8 @@ async def assign_volume(db: Session, user_id: str) -> OutlinerDocument:
         content=text,
         filename=volume_id,
         user_id=user_id,
+        group_id=group.id,
+        batch_id=group.batch_id,
     )
 
     await update_volume_status(volume_id, "in_progress")

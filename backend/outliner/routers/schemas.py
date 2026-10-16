@@ -857,19 +857,55 @@ class StatisticsResponse(BaseModel):
     reviewed_by_user: List[ReviewerApprovedRow] = Field(default_factory=list)
 
 
-class ActiveBatchResponse(BaseModel):
-    """Stored active BEC volume batch id for admin workflow (single row)."""
+class GroupMemberOut(BaseModel):
+    user_id: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    picture: Optional[str] = None
+    role: Optional[str] = None
 
-    batch_id: Optional[str] = Field(
-        default=None,
-        description="Currently selected batch id, or null if none set.",
-    )
+
+class GroupOut(BaseModel):
+    """A work group: its members get new volumes from ``batch_id`` and review each
+    other's completed documents."""
+
+    id: str
+    name: str
+    batch_id: Optional[str] = None
+    members: List[GroupMemberOut] = Field(default_factory=list)
 
 
-class ActiveBatchUpdate(BaseModel):
-    """Replace or clear the active batch. Send ``batch_id: null`` to clear."""
+class MyGroupOut(BaseModel):
+    id: str
+    name: str
+    batch_id: Optional[str] = None
 
-    batch_id: Optional[str] = Field(
-        default=None,
-        description="BEC volume batch id to mark active, or null to clear.",
+
+class GroupCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    batch_id: Optional[str] = None
+
+
+class GroupUpdate(BaseModel):
+    """Fields left out are unchanged. Send ``batch_id: null`` to unlink the batch."""
+
+    name: Optional[str] = Field(None, min_length=1)
+    batch_id: Optional[str] = None
+
+
+class GroupMembersUpdate(BaseModel):
+    """The group's full member list; replaces the current one."""
+
+    user_ids: List[str] = Field(default_factory=list)
+
+
+class BatchOption(BaseModel):
+    batch_id: str
+    active: int = Field(0, description="Volumes still waiting to be assigned")
+
+
+class AssignVolumeRequest(BaseModel):
+    group_id: Optional[str] = Field(
+        None,
+        description="Group to take work from; needed only when the user is in more than one group.",
     )

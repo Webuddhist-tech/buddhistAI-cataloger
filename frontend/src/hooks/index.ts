@@ -13,5 +13,5 @@ export type { DashboardStatsFilters } from './useDashboardStats';
 export { useAnnotatorWeeklyQuality } from './useAnnotatorWeeklyQuality';
 export type { AnnotatorWeeklyQualityFilters } from './useAnnotatorWeeklyQuality';
 export { useReviewerStats } from './useReviewerStats';
-export { useActiveBatch } from './useActiveBatch';
+export { useOutlinerGroups, useGroupBatches, useMyOutlinerGroups } from './useOutlinerGroups';
 export { useStatistics } from './useStatistics';

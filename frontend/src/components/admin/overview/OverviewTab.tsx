@@ -26,7 +26,8 @@ import {
 import type { ChartOptions, TooltipItem } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import type { DashboardChartSeries, DashboardStats } from '@/api/outliner'
-import { useActiveBatch } from '@/hooks'
+import { useOutlinerGroups } from '@/hooks'
+import { useUser } from '@/hooks/useUser'
 import AnnotatorQualityScatter from './AnnotatorQualityScatter'
 import AnnotatedPendingReviewDialog from './AnnotatedPendingReviewDialog'
 
@@ -575,8 +576,16 @@ function OverviewTab({
   >('chart')
   const [reviewerActivityView, setReviewerActivityView] = useState<'chart' | 'table'>('chart')
   const [pendingReviewDialogOpen, setPendingReviewDialogOpen] = useState(false)
-  const { data: activeBatchData, setActiveBatch, isUpdating: activeBatchUpdating } = useActiveBatch()
-  const activeBatchId = activeBatchData?.batch_id ?? null
+  const { user } = useUser()
+  const showBatchGroups = user?.role === 'admin'
+  const { groups } = useOutlinerGroups({ enabled: showBatchGroups })
+  const groupNamesByBatch = useMemo(() => {
+    const byBatch = new Map<string, string[]>()
+    for (const g of groups) {
+      if (g.batch_id) byBatch.set(g.batch_id, [...(byBatch.get(g.batch_id) ?? []), g.name])
+    }
+    return byBatch
+  }, [groups])
 
   const presentation = stats?.presentation
 
@@ -991,10 +1000,8 @@ return (
                 <table className="w-full min-w-[32rem] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-stone-200 bg-stone-50/90 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <th className="w-10 px-2 py-3 text-center font-normal normal-case tracking-normal">
-                        <span className="sr-only">Set as active batch</span>
-                      </th>
                       <th className="px-4 py-3">Batch ID</th>
+                      {showBatchGroups && <th className="px-4 py-3">Groups</th>}
                       <th className="px-4 py-3 text-right tabular-nums">Available</th>
                       <th className="px-4 py-3 text-right tabular-nums">Annotating</th>
                       <th className="px-4 py-3 text-right tabular-nums">Skipped</th>
@@ -1004,33 +1011,18 @@ return (
                   </thead>
                   <tbody>
                     {view.volume_batches.rows.map((row) => {
-                      const isActiveRow =
-                        activeBatchId !== null && String(activeBatchId) === row.batch_id
+                      const groupNames = groupNamesByBatch.get(row.batch_id) ?? []
                       return (
                         <tr
                           key={row.batch_id}
                           className="border-b border-stone-100 last:border-0 hover:bg-stone-50/80"
                         >
-                          <td className="px-2 py-2.5 text-center align-middle">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 cursor-pointer rounded border-stone-300 text-primary accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                              checked={isActiveRow}
-                              disabled={activeBatchUpdating}
-                              onChange={(e) => {
-                                if (!confirm("Are you sure you want to set this batch as active?")) return
-                                void setActiveBatch({
-                                  batch_id: e.target.checked ? row.batch_id : null,
-                                })
-                              }}
-                              aria-label={
-                                isActiveRow
-                                  ? `Clear active batch (currently ${row.batch_id})`
-                                  : `Set batch ${row.batch_id} as active`
-                              }
-                            />
-                          </td>
                           <td className="px-4 py-2.5 font-medium text-foreground">{row.batch_id}</td>
+                          {showBatchGroups && (
+                            <td className="px-4 py-2.5 text-foreground">
+                              {groupNames.length ? groupNames.join(', ') : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          )}
                           <td className="px-4 py-2.5 text-right tabular-nums text-foreground">
                             {row.active.toLocaleString()}
                           </td>

@@ -602,9 +602,12 @@ export const deleteSegmentComment = async (
   return handleApiResponse(response);
 };
 
-export const assignVolume = async (): Promise<OutlinerDocument> => {
+/** Next volume from the caller's group's batch. `groupId` is needed only for users in several groups. */
+export const assignVolume = async (groupId?: string): Promise<OutlinerDocument> => {
   const response = await outlinerFetch(`${OUTLINER_BASE_URL}/assign_volume`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group_id: groupId ?? null }),
   });
 
   return handleApiResponse(response);
@@ -1237,24 +1240,76 @@ export const getStatistics = async (
   return handleApiResponse(response);
 };
 
-/** GET/PUT …/dashboard/active-batch — admin-selected BEC volume batch. */
-export interface ActiveBatchState {
-  batch_id: string | null;
+// ==================== Work Groups ====================
+// A group links annotators and reviewers to one BDRC volume batch.
+
+export interface OutlinerGroupMember {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  picture: string | null;
+  role: string | null;
 }
 
-export const getActiveBatch = async (): Promise<ActiveBatchState> => {
-  const response = await outlinerFetch(`${OUTLINER_BASE_URL}/dashboard/active-batch`);
-  return handleApiResponse(response);
-};
+export interface OutlinerGroup {
+  id: string;
+  name: string;
+  batch_id: string | null;
+  members: OutlinerGroupMember[];
+}
 
-export const updateActiveBatch = async (body: ActiveBatchState): Promise<ActiveBatchState> => {
-  const response = await outlinerFetch(`${OUTLINER_BASE_URL}/dashboard/active-batch`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return handleApiResponse(response);
-};
+export type MyOutlinerGroup = Omit<OutlinerGroup, 'members'>;
+
+export interface BatchOption {
+  batch_id: string;
+  active: number;
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json', accept: 'application/json' };
+
+export const getMyGroups = async (): Promise<MyOutlinerGroup[]> =>
+  handleApiResponse(await outlinerFetch(`${OUTLINER_BASE_URL}/groups/mine`));
+
+export const listGroups = async (): Promise<OutlinerGroup[]> =>
+  handleApiResponse(await outlinerFetch(`${OUTLINER_BASE_URL}/groups`));
+
+export const listGroupBatches = async (): Promise<BatchOption[]> =>
+  handleApiResponse(await outlinerFetch(`${OUTLINER_BASE_URL}/groups/batches`));
+
+export const createGroup = async (body: { name: string; batch_id: string | null }): Promise<OutlinerGroup> =>
+  handleApiResponse(
+    await outlinerFetch(`${OUTLINER_BASE_URL}/groups`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    })
+  );
+
+export const updateGroup = async (
+  groupId: string,
+  body: { name?: string; batch_id?: string | null }
+): Promise<OutlinerGroup> =>
+  handleApiResponse(
+    await outlinerFetch(`${OUTLINER_BASE_URL}/groups/${groupId}`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    })
+  );
+
+export const setGroupMembers = async (groupId: string, userIds: string[]): Promise<OutlinerGroup> =>
+  handleApiResponse(
+    await outlinerFetch(`${OUTLINER_BASE_URL}/groups/${groupId}/members`, {
+      method: 'PUT',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ user_ids: userIds }),
+    })
+  );
+
+export const deleteGroup = async (groupId: string): Promise<void> =>
+  handleApiResponse(
+    await outlinerFetch(`${OUTLINER_BASE_URL}/groups/${groupId}`, { method: 'DELETE' })
+  );
 
 // ==================== Reviewer Stats ====================
 

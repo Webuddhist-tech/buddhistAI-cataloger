@@ -1,6 +1,6 @@
 import ChevronUporDown from "@/components/outliner/utils/ChevronUporDown";
 import { useUser } from "@/hooks/useUser";
-import {BarChart2, ClipboardCheck, FileIcon, HomeIcon, UsersIcon } from "lucide-react";
+import {BarChart2, ClipboardCheck, FileIcon, HomeIcon, UsersIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { SplitPane, Pane } from "react-split-pane";
@@ -22,6 +22,7 @@ const ADMIN_LINKS: AdminNavItem[] = [
   { to: "/outliner-admin/reviewer-stats", label: "Reviewer Stats", icon: <ClipboardCheck className="w-4 h-4" />},
   { to: "/outliner-admin/documents", label: "Documents" ,icon: <FileIcon className="w-4 h-4" />},
   { to: "/outliner-admin/users", label: "Users" ,icon: <UsersIcon className="w-4 h-4" />},
+  { to: "/outliner-admin/groups", label: "Groups" ,icon: <UsersRoundIcon className="w-4 h-4" />},
   {
     to: "/outliner-admin/bdrc-library",
     label: "BDRC Library",
@@ -88,7 +89,7 @@ const OutlinerAdminLayout = ({ children }: { children: React.ReactNode }) => {
   const toggleSection = (path: string) => {
     setOpenSections((s) => ({ ...s, [path]: !s[path] }));
   };
-  const ADMIN_LABELS=new Set<string>(["Users","BDRC Library","Works","Persons"]);
+  const ADMIN_LABELS=new Set<string>(["Users","Groups","BDRC Library","Works","Persons"]);
 
   const content = (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 ">

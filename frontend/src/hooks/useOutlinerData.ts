@@ -48,6 +48,8 @@ export interface DocumentFilters {
   excludeOwnAssignedDocuments?: boolean;
   /** TEMP: hide fully reviewed Tsenlek (mmBERT test) documents that have rejected segments. */
   hideTestRejected?: boolean;
+  /** Only documents assigned from this work group. */
+  groupId?: string;
 }
 
 /**
@@ -66,6 +68,7 @@ export function useDocuments(filters: DocumentFilters = {}) {
     includeSkipped = false,
     excludeOwnAssignedDocuments = false,
     hideTestRejected = false,
+    groupId,
   } = filters;
   const skip = (page - 1) * pageSize;
   const [, setSearchParams] = useSearchParams();
@@ -78,7 +81,7 @@ export function useDocuments(filters: DocumentFilters = {}) {
   } = useQuery<Document[]>({
     queryKey: [
       'outliner-admin-documents',
-      { status, userId, reviewerId, title, skip, limit: pageSize, includeApproved, includeSkipped, excludeOwnAssignedDocuments, hideTestRejected },
+      { status, userId, reviewerId, title, skip, limit: pageSize, includeApproved, includeSkipped, excludeOwnAssignedDocuments, hideTestRejected, groupId },
     ],
     queryFn: async () => {
       const token = await getAccessTokenSilently();
@@ -91,6 +94,7 @@ export function useDocuments(filters: DocumentFilters = {}) {
       params.append('include_approved', String(includeApproved));
       params.append('include_skipped', String(includeSkipped));
       if (hideTestRejected) params.append('hide_test_rejected', 'true');
+      if (groupId) params.append('group_id', groupId);
       params.set('skip', String(skip));
       params.set('limit', String(pageSize));
       const url = `${OUTLINER_BASE_URL}/documents?${params.toString()}`;

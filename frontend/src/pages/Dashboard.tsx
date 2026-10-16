@@ -24,6 +24,14 @@ import { useUser } from '@/hooks/useUser';
 import { Progress } from '@/components/ui/progress';
 import { formatDistanceToNow } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useMyOutlinerGroups } from '@/hooks';
 
 const OutlinerUpload: React.FC = () => {
   const {user}= useUser();
@@ -105,8 +113,13 @@ const OutlinerUpload: React.FC = () => {
   }, [user, hasPermission, navigate]);
 
 
+  const { data: myGroups = [], isLoading: isLoadingGroups } = useMyOutlinerGroups({ enabled: !!userId });
+  const [chosenGroupId, setChosenGroupId] = useState<string>('');
+  // One group: use it. Several: the user picks which batch to take work from.
+  const assignGroupId = myGroups.length === 1 ? myGroups[0].id : chosenGroupId;
+
   const assignWorkMutation = useMutation({
-    mutationFn: () => assignVolume(),
+    mutationFn: () => assignVolume(assignGroupId || undefined),
     onSuccess: (document) => {
       queryClient.invalidateQueries({ queryKey: ['outliner-documents', userId] });
       queryClient.invalidateQueries({ queryKey: ['outliner-assign-volume-eligibility', userId] });
@@ -142,7 +155,8 @@ const OutlinerUpload: React.FC = () => {
   const assignDisabled =
     assignWorkMutation.isPending ||
     !userId ||
-    !assignEligibility?.allowed;
+    !assignEligibility?.allowed ||
+    !assignGroupId;
    return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
@@ -210,7 +224,27 @@ const OutlinerUpload: React.FC = () => {
                 My stats
               </Link>
             </Button>
-                <Button
+            {!isLoadingGroups && myGroups.length === 0 && (
+              <span className="text-sm text-amber-700">You are not in a group yet. Ask an admin to add you to one.</span>
+            )}
+            {myGroups.length === 1 && (
+              <span className="text-sm text-gray-500">Group: {myGroups[0].name}</span>
+            )}
+            {myGroups.length > 1 && (
+              <Select value={chosenGroupId} onValueChange={setChosenGroupId}>
+                <SelectTrigger className="w-44" aria-label="Group to take work from">
+                  <SelectValue placeholder="Choose group" />
+                </SelectTrigger>
+                <SelectContent>
+                  {myGroups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
               onClick={assignWork}
               disabled={assignDisabled}
             >
