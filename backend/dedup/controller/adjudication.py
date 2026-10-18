@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from dedup.controller.dedup import _item_view, merged_fields
+from dedup.controller.dedup import CORRECTED_DETAIL, _item_view, merged_fields
 from dedup.deps import can_adjudicate
 from dedup.models.dedup import (
     NEW_LABEL,
@@ -72,8 +72,9 @@ def _view(
     viewer_id: str,
     decision: Optional[DedupDecision],
     active_seconds: int = 0,
+    corrected: bool = False,
 ) -> AdjudicationItemOut:
-    base = _item_view(item, decision, None)
+    base = _item_view(item, decision, None, corrected=corrected)
     return AdjudicationItemOut(
         **base.model_dump(),
         note=decision.note if decision else None,
@@ -99,8 +100,12 @@ def queue(db: Session, user: User, state: str = "open") -> list[AdjudicationItem
     answers = repo.annotator_answers_for(db, ids)
     mine = {i: d for i, d in repo.latest_adjudicator_decisions(db, ids).items() if d.user_id == user.id}
     time = repo.active_seconds(db, user.id)
+    corrected = repo.corrected_item_ids(db, ids)
     return [
-        _view(items[a.item_id], a, answers[a.item_id], user.id, mine.get(a.item_id), time.get((a.item_id, user.id), 0))
+        _view(
+            items[a.item_id], a, answers[a.item_id], user.id, mine.get(a.item_id),
+            time.get((a.item_id, user.id), 0), a.item_id in corrected,
+        )
         for a in adjs
         if a.item_id in items
     ]
@@ -131,7 +136,8 @@ def get_item(db: Session, user: User, item_id: int) -> AdjudicationItemOut:
     db.commit()
     decision = repo.latest_decision(db, item_id, user.id, ROLE_ADJUDICATOR)
     time = repo.active_seconds(db, user.id).get((item_id, user.id), 0)
-    return _view(item, adj, repo.annotator_answers(db, item_id), user.id, decision, time)
+    corrected = bool(repo.corrected_item_ids(db, [item_id]))
+    return _view(item, adj, repo.annotator_answers(db, item_id), user.id, decision, time, corrected)
 
 
 def _resolution(verdict: str, answers: dict[int, DedupDecision]) -> str:
@@ -149,6 +155,8 @@ def save_decision(db: Session, user: User, item_id: int, body: AdjudicationIn) -
     BDRC. They may change it later, as annotators can; the newest answer wins."""
     _require(user)
     item, adj = _take(db, user, item_id)
+    if repo.corrected_item_ids(db, [item_id]):
+        raise HTTPException(status_code=409, detail=CORRECTED_DETAIL)
     answers = repo.annotator_answers(db, item_id)
     prev = repo.latest_decision(db, item_id, user.id, ROLE_ADJUDICATOR)
     fields = merged_fields(prev, body)

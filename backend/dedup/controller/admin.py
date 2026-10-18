@@ -1,5 +1,5 @@
 """Admin views of dedup work: progress, per-annotator throughput and agreement,
-reassigning annotator slots and adjudications."""
+reassigning annotator slots and adjudications, and correcting a pair's final answer."""
 from __future__ import annotations
 
 import logging
@@ -14,16 +14,30 @@ from sqlalchemy.orm import Session
 from dedup import client
 from dedup.client import ReviewApiError
 from dedup.controller.adjudication import annotations
-from dedup.controller.dedup import _views_for, bdrc_error
+from dedup.controller.dedup import _views_for, bdrc_error, get_pair, merged_fields
 from dedup.deps import can_adjudicate, can_annotate, dedup_role, has_dedup_access
-from dedup.models.dedup import SETTING_REVIEW_MODE, DedupAssignment
+from dedup.models.dedup import (
+    ADMIN_CORRECTED,
+    MODE_SINGLE,
+    ROLE_ADMIN_CORRECTION,
+    SETTING_REVIEW_MODE,
+    SYNC_PENDING,
+    DedupAssignment,
+    DedupDecision,
+    DedupItem,
+)
 from dedup.repository import dedup_repository as repo
 from dedup.schemas import (
     AdjudicationReassignIn,
     AdminAdjudicationOut,
     AdminBatchOut,
     AdminOverviewOut,
+    AdminPairListOut,
+    AdminPairOut,
+    AdminPairRow,
     AnnotatorOut,
+    CorrectionIn,
+    DecisionHistoryOut,
     DoubleReviewCounts,
     ItemOut,
     ReassignIn,
@@ -253,3 +267,138 @@ def update_settings(db: Session, admin: User, body: SettingsIn) -> SettingsOut:
     db.commit()
     logger.info("dedup admin=%s review_mode=%s", admin.id, body.review_mode)
     return settings(db)
+
+
+# --- correcting a pair -----------------------------------------------------------------
+
+def list_pairs(db: Session, **filters) -> AdminPairListOut:
+    """Handed-out pairs with their current final answer, for the admin pair list."""
+    found, total = repo.search_pairs(db, **filters)
+    ids = [item.item_id for item, _ in found]
+    assignments = repo.assignments_for_items(db, ids)
+    corrected = repo.corrected_item_ids(db, ids)
+    user_ids = {a.user_id for a in assignments} | {d.user_id for _, d in found if d}
+    names = {
+        u.id: u.name or u.email or u.id
+        for u in db.execute(select(User).where(User.id.in_(user_ids))).scalars()
+    } if user_ids else {}
+    assignees: dict[int, list[str]] = {}
+    for a in sorted(assignments, key=lambda a: a.slot):
+        assignees.setdefault(a.item_id, []).append(names.get(a.user_id, a.user_id))
+    return AdminPairListOut(
+        total=total,
+        rows=[
+            AdminPairRow(
+                item_id=item.item_id,
+                batch_id=item.batch_id,
+                title_a=((item.evidence or {}).get("a") or {}).get("title_bo"),
+                title_b=((item.evidence or {}).get("b") or {}).get("title_bo"),
+                review_mode=item.review_mode,
+                verdict=d.verdict if d else None,
+                abstention_reason=d.abstention_reason if d else None,
+                answered_by=d.user_id if d else None,
+                answered_by_name=names.get(d.user_id) if d else None,
+                answered_role=d.role if d else None,
+                decided_at=d.decided_at if d else None,
+                sync_state=d.sync_state if d else None,
+                corrected=item.item_id in corrected,
+                annotator_names=assignees.get(item.item_id, []),
+            )
+            for item, d in found
+        ],
+    )
+
+
+def _pair_view(db: Session, item: DedupItem) -> AdminPairOut:
+    history = repo.decision_history(db, item.item_id)
+    slots = {a.user_id: a.slot for a in repo.item_assignments(db, item.item_id)}
+    names = {
+        u.id: u.name or u.email
+        for u in db.execute(select(User).where(User.id.in_({d.user_id for d in history}))).scalars()
+    }
+    final = repo.final_decision(db, item.item_id)
+    rows = {
+        d.id: DecisionHistoryOut(
+            user_id=d.user_id,
+            user_name=names.get(d.user_id),
+            role=d.role,
+            slot=slots.get(d.user_id) if d.role != ROLE_ADMIN_CORRECTION else None,
+            is_final=d.is_final,
+            verdict=d.verdict,
+            abstention_reason=d.abstention_reason,
+            confidence=d.confidence,
+            issues=d.issues,
+            partner_payload=d.partner_payload,
+            note=d.note,
+            decided_at=d.decided_at,
+            sync_state=d.sync_state,
+        )
+        for d in history
+    }
+    return AdminPairOut(
+        item_id=item.item_id,
+        batch_id=item.batch_id,
+        kind=item.kind,
+        subject=item.subject,
+        evidence=item.evidence,
+        review_mode=item.review_mode,
+        final=rows[final.id] if final else None,
+        history=list(rows.values()),
+        corrected=any(d.role == ROLE_ADMIN_CORRECTION for d in history),
+    )
+
+
+def pair(db: Session, item_id: int) -> AdminPairOut:
+    """A pair with its current final answer and every answer saved on it. A pair BDRC
+    has but nobody has been handed yet comes with no answers."""
+    item = repo.get_item(db, item_id)
+    if item is None:
+        return AdminPairOut(**get_pair(db, item_id).model_dump(), handed_out=False)
+    return _pair_view(db, item)
+
+
+def correct_pair(db: Session, admin: User, item_id: int, body: CorrectionIn) -> AdminPairOut:
+    """Make the admin's answer the pair's final answer and queue it for BDRC.
+
+    The earlier answers stay in the history. Nobody else can change the pair after
+    this: unfinished annotator slots are released, an open adjudication is closed, and
+    annotator and adjudicator saves are refused. The admin can correct again.
+    """
+    if repo.get_item(db, item_id) is None:
+        try:
+            row = client.get_item(item_id)
+        except ReviewApiError as exc:
+            raise bdrc_error(exc) from exc
+        repo.upsert_item(db, row)
+        # Nobody reviews it in the tool, so BDRC gets the admin's answer as it is.
+        repo.set_mode_if_fresh(db, item_id, MODE_SINGLE)
+    item = repo.get_item(db, item_id, lock=True)  # waits for an annotator's save in flight
+
+    fields = merged_fields(repo.final_decision(db, item_id), body)
+    now = datetime.utcnow()
+    repo.add_decision(
+        db,
+        DedupDecision(
+            item_id=item_id,
+            user_id=admin.id,
+            role=ROLE_ADMIN_CORRECTION,
+            status="finalized",
+            **fields,
+            note=(body.note or "").strip() or None,
+            decided_at=now,
+            evidence_hash=item.evidence_hash,
+            is_final=True,
+            sync_state=SYNC_PENDING,
+        ),
+    )
+    released, _ = repo.release(db, [item_id])
+    adj = repo.get_adjudication(db, item_id, lock=True)
+    if adj is not None and adj.completed_at is None:
+        adj.completed_at = now
+        adj.resolution = ADMIN_CORRECTED
+    db.commit()
+    logger.info(
+        "dedup admin=%s corrected item=%s verdict=%s released_slots=%s",
+        admin.id, item_id, fields["verdict"], len(released),
+    )
+    return _pair_view(db, item)

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { AlertTriangle, Gavel, LayoutDashboard, UserCog, Users } from 'lucide-react';
+import { AlertTriangle, Gavel, LayoutDashboard, PencilLine, UserCog, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@/hooks/useUser';
 import { useDedupSettings } from '../hooks/useReview';
@@ -10,10 +10,13 @@ const LINKS = [
   { to: '/dedup-admin/overview', label: 'dedup.admin.nav.overview', icon: LayoutDashboard },
   { to: '/dedup-admin/annotators', label: 'dedup.admin.nav.annotators', icon: Users },
   { to: '/dedup-admin/adjudications', label: 'dedup.admin.nav.adjudications', icon: Gavel },
+  { to: '/dedup-admin/pairs', label: 'dedup.admin.nav.pairs', icon: PencilLine },
   { to: '/dedup-admin/users', label: 'dedup.admin.nav.users', icon: UserCog },
 ];
 
-export default function DedupAdminLayout({ children }: Readonly<{ children: ReactNode }>) {
+// `bare`: the admin check only, without the side menu, for full-width screens such as
+// the answer screen an admin corrects a pair on.
+export default function DedupAdminLayout({ children, bare = false }: Readonly<{ children: ReactNode; bare?: boolean }>) {
   const { t } = useTranslation();
   const { user, isLoading } = useUser();
   const admin = isDedupAdmin(user);
@@ -24,6 +27,7 @@ export default function DedupAdminLayout({ children }: Readonly<{ children: Reac
   if (!admin) {
     return <p className="py-24 text-center text-sm text-gray-500">{t('dedup.admin.adminsOnly')}</p>;
   }
+  if (bare) return <>{children}</>;
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] w-full flex-col md:flex-row">

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Flag, Lock } from 'lucide-react';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Check, Flag, Lock, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import type { AdjudicationItem, DecisionInput, ReviewItem } from '../api/review';
+import type { AdjudicationItem, AdminPair, DecisionInput, ReviewItem } from '../api/review';
+import AnswerHistory from '../components/AnswerHistory';
 import AnnotatorAnswers from '../components/AnnotatorAnswers';
 import CantAnswerDialog, { type CantAnswerStart } from '../components/CantAnswerDialog';
 import FullTextDialog, { type FullTextView } from '../components/FullTextDialog';
@@ -15,9 +16,11 @@ import PairEvidence from '../components/PairEvidence';
 import type { ScanTag } from '../components/ScanPanel';
 import { useActiveTimer } from '../hooks/useActiveTimer';
 import {
+  useAdminPair,
   useAdjudicationItem,
   useAdjudicationQueue,
   useBatchName,
+  useCorrectPair,
   useItem,
   useMyItems,
   useSaveAdjudication,
@@ -30,27 +33,65 @@ const CONFIDENCE = [1, 2, 3, 4, 5];
 const PTR = 'cursor-pointer';
 const CHOSEN_NEUTRAL = 'border-gray-800 bg-gray-800 text-white hover:bg-gray-900 hover:text-white';
 
-export type ReviewMode = 'annotate' | 'adjudicate';
+export type ReviewMode = 'annotate' | 'adjudicate' | 'correct';
+
+// The admin pair as the answer screen reads an item: its final answer in the usual fields.
+function correctionItem(p: AdminPair): ReviewItem {
+  const f = p.final;
+  return {
+    item_id: p.item_id,
+    batch_id: p.batch_id,
+    kind: p.kind,
+    subject: p.subject,
+    evidence: p.evidence,
+    status: f ? 'finalized' : 'new',
+    verdict: f?.verdict ?? null,
+    abstention_reason: f?.abstention_reason ?? null,
+    confidence: f?.confidence ?? null,
+    issues: f?.issues ?? null,
+    partner_payload: f?.partner_payload ?? null,
+    annotator_id: f?.user_id ?? null,
+    decided_at: f?.decided_at ?? null,
+    sync_state: f?.sync_state ?? null,
+    assignment: null,
+    review_mode: p.review_mode,
+    locked: false,
+    corrected: p.corrected,
+  };
+}
 
 // Keys (plan §11): J same, F different, C contains / part-of, Space can't answer,
 // X report a data problem on the saved answer, 1-5 confidence, arrows move.
 //
 // `adjudicate`: the same screen for a disputed pair, with both annotators' answers above
 // the texts and an optional note. The adjudicator's answer is final.
+// `correct` (admins, /dedup-admin/pairs/:id): any pair, with every answer saved on it
+// above the texts; the admin's answer replaces the final one. Previous / next follow the
+// admin pair list the pair was opened from.
 export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMode }>) {
   const { t } = useTranslation();
   const adjudicate = mode === 'adjudicate';
+  const correct = mode === 'correct';
+  // From the admin pair list: its filters (to go back to) and the pairs on its page.
+  const fromList = useLocation().state as { from?: string; ids?: number[] } | null;
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
   const navigate = useNavigate();
   const batchName = useBatchName();
 
-  const annotatorItem = useItem(adjudicate ? undefined : itemId);
+  const annotatorItem = useItem(mode === 'annotate' ? itemId : undefined);
   const adjudicationItem = useAdjudicationItem(adjudicate ? itemId : undefined);
-  const itemQuery = adjudicate ? adjudicationItem : annotatorItem;
-  const myList = useMyItems('all', undefined, !adjudicate);
+  const adminPair = useAdminPair(correct ? itemId : undefined);
+  const adminItem = useMemo(() => (adminPair.data ? correctionItem(adminPair.data) : undefined), [adminPair.data]);
+  const itemQuery: { data?: ReviewItem; error: Error | null; isLoading: boolean; isPlaceholderData: boolean } = correct
+    ? { data: adminItem, error: adminPair.error, isLoading: adminPair.isLoading, isPlaceholderData: false }
+    : adjudicate
+      ? adjudicationItem
+      : annotatorItem;
+  const myList = useMyItems('all', undefined, mode === 'annotate');
   const adjudicationList = useAdjudicationQueue('all', adjudicate);
-  const list: { data?: ReviewItem[] } = adjudicate ? adjudicationList : myList;
+  const adminList = useMemo(() => ({ data: (fromList?.ids ?? []).map((id) => ({ item_id: id }) as ReviewItem) }), [fromList?.ids]);
+  const list: { data?: ReviewItem[] } = correct ? adminList : adjudicate ? adjudicationList : myList;
   const loaded = useMemo(() => list.data ?? [], [list.data]);
   const total = loaded.length;
   const index = loaded.findIndex((i) => i.item_id === itemId);
@@ -59,22 +100,28 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   const nextId = index >= 0 && index < loaded.length - 1 ? loaded[index + 1].item_id : null;
   const goTo = useCallback(
     (id: number | null) => {
-      if (id != null) navigate(adjudicate ? `/dedup/adjudicate/${id}` : `/dedup/item/${id}`);
+      if (id == null) return;
+      if (correct) navigate(`/dedup-admin/pairs/${id}`, { state: fromList });
+      else navigate(adjudicate ? `/dedup/adjudicate/${id}` : `/dedup/item/${id}`);
     },
-    [navigate, adjudicate],
+    [navigate, adjudicate, correct, fromList],
   );
 
   const item = itemQuery.data as ReviewItem | AdjudicationItem | undefined;
   const adjItem = adjudicate ? (item as AdjudicationItem | undefined) : undefined;
   const saveAnswer = useSaveDecision();
   const saveAdjudication = useSaveAdjudication();
-  const save = adjudicate ? saveAdjudication : saveAnswer;
-  // Both annotators have answered: the answer is shown but can no longer change.
-  const locked = Boolean(!adjudicate && item?.locked);
+  const saveCorrection = useCorrectPair();
+  const save = correct ? saveCorrection : adjudicate ? saveAdjudication : saveAnswer;
+  // Both annotators have answered (or an admin corrected the pair): the answer is shown
+  // but can no longer change. An adjudicator's pair is only ever locked by a correction;
+  // an admin can always correct again.
+  const locked = Boolean(!correct && item?.locked);
+  const lockedByAdmin = Boolean(item?.corrected);
   // Only for the person doing the work on the pair (an admin viewing it is not).
   const { commit: commitActiveTime } = useActiveTimer(
     item?.item_id,
-    Boolean(item && loaded.some((i) => i.item_id === item.item_id)),
+    Boolean(!correct && item && loaded.some((i) => i.item_id === item.item_id)),
     Boolean(item && isDecided(item)),
   );
   const [note, setNote] = useState('');
@@ -119,6 +166,12 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
       };
       commitActiveTime();
       try {
+        if (correct) {
+          // A correction stays on the pair, so the admin sees it land in the history.
+          await saveCorrection.mutateAsync({ itemId: item.item_id, fields: body });
+          toast.success(t('dedup.admin.pair.saved'));
+          return;
+        }
         if (adjudicate) await saveAdjudication.mutateAsync({ itemId: item.item_id, fields: { ...body, note: note.trim() || null } });
         else await saveAnswer.mutateAsync({ itemId: item.item_id, fields: body });
         // Reporting a problem on an answered pair stays here; answering moves on.
@@ -128,7 +181,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
         throw e;
       }
     },
-    [item, confidence, adjudicate, note, saveAdjudication, saveAnswer, goTo, nextId, commitActiveTime, t],
+    [item, confidence, correct, adjudicate, note, saveCorrection, saveAdjudication, saveAnswer, goTo, nextId, commitActiveTime, t],
   );
 
   // A note on an answer already saved goes with that same answer.
@@ -167,10 +220,10 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   // A data problem is reported alongside an answer (plan §5), so the pair needs one first.
   const answered = Boolean(item && isDecided(item));
   const reportProblem = useCallback(() => {
-    if (locked) toast.info(t('dedup.review.lockedInfo'));
+    if (locked) toast.info(t(lockedByAdmin ? 'dedup.review.correctedInfo' : 'dedup.review.lockedInfo'));
     else if (answered) setDialog('issue');
     else toast.info(t('dedup.review.answerFirst'));
-  }, [answered, locked, t]);
+  }, [answered, locked, lockedByAdmin, t]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,7 +250,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   // Someone else's pair (e.g. a link copied from the address bar into a spreadsheet):
   // show the read-only page instead of a work page they cannot use.
   const notMine = itemQuery.error != null || (item != null && !itemQuery.isPlaceholderData && item.assignment == null);
-  if (!adjudicate && notMine) {
+  if (mode === 'annotate' && notMine) {
     return <Navigate to={`/dedup/pair/${itemIdParam}`} replace />;
   }
 
@@ -233,10 +286,14 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
     <div className={`w-full ${scan ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6`} style={{ paddingBottom: barHeight + 24 }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          to={adjudicate ? '/dedup/adjudicate' : '/dedup'}
+          to={correct ? `/dedup-admin/pairs${fromList?.from ?? ''}` : adjudicate ? '/dedup/adjudicate' : '/dedup'}
           className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
         >
-          <ArrowLeft className="h-4 w-4" /> {t(adjudicate ? 'dedup.adjudicationQueue.title' : 'dedup.review.myItems')}
+          <ArrowLeft className="h-4 w-4" />{' '}
+          {correct
+            ? t('dedup.admin.pairs.back')
+            : t(adjudicate ? 'dedup.adjudicationQueue.title' : 'dedup.review.myItems')}
+          {correct && <span className="ml-1 text-xs font-medium tabular-nums text-gray-500">· {t('dedup.pairView.title', { id: item.item_id })}</span>}
           <span className="ml-1 text-xs text-gray-400" title={item.batch_id}>· {batchName(item.batch_id)}</span>
         </Link>
         <div className="flex items-center gap-2">
@@ -265,6 +322,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
         bottomInset={barHeight}
       >
         {adjItem && <AnnotatorAnswers answers={adjItem.annotations} a={cardA} b={cardB} />}
+        {correct && adminPair.data && <AnswerHistory history={adminPair.data.history} corrected={adminPair.data.corrected} />}
       </PairEvidence>
 
       {adjudicate && (
@@ -304,9 +362,19 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
                 recorded && (
                   <span className="inline-flex items-center gap-1.5 text-gray-600">
                     <Check className="h-3.5 w-3.5 text-green-600" />
-                    {t(adjudicate ? 'dedup.review.finalAnswer' : 'dedup.review.saved')} <span className="font-medium text-gray-900">{recorded}</span>
+                    {t(adjudicate || correct ? 'dedup.review.finalAnswer' : 'dedup.review.saved')} <span className="font-medium text-gray-900">{recorded}</span>
+                    {correct && adminPair.data?.final && (
+                      <span className="text-gray-500">
+                        · {adminPair.data.final.user_name ?? adminPair.data.final.user_id}
+                      </span>
+                    )}
                   </span>
                 )
+              )}
+              {correct && lockedByAdmin && (
+                <span className="inline-flex items-center gap-1 text-blue-700">
+                  <ShieldCheck className="h-3.5 w-3.5" /> {t('dedup.admin.pair.correctedBadge')}
+                </span>
               )}
               {problems.map((p, i) => (
                 <span
@@ -320,7 +388,8 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
               {!answered && problems.length > 0 && <span className="text-amber-800">{t('dedup.review.needsAnswer')}</span>}
               {locked && (
                 <span className="inline-flex items-center gap-1.5 text-gray-600">
-                  <Lock className="h-3.5 w-3.5" /> Both annotators have answered, so this answer is locked
+                  <Lock className="h-3.5 w-3.5" />{' '}
+                  {lockedByAdmin ? t('dedup.review.correctedLocked') : 'Both annotators have answered, so this answer is locked'}
                 </span>
               )}
               {answered && !locked && (

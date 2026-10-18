@@ -39,6 +39,7 @@ const DedupAdminAnnotatorsLazy = lazy(() => import('@/features/dedup').then((m) 
 const DedupAdminAnnotatorLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAnnotator })));
 const DedupAdminAdjudicationsLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAdjudications })));
 const DedupAdminUsersLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminUsers })));
+const DedupAdminPairListLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminPairList })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -214,6 +215,21 @@ function App() {
             <ProtectedRoute>
               <DedupAdminLayoutLazy>
                 <DedupAdminUsersLazy />
+              </DedupAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          <Route path="/dedup-admin/pairs" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy>
+                <DedupAdminPairListLazy />
+              </DedupAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          {/* Admins correct a pair on the answer screen; /dedup/pair/:id stays read-only for everyone. */}
+          <Route path="/dedup-admin/pairs/:itemId" element={
+            <ProtectedRoute>
+              <DedupAdminLayoutLazy bare>
+                <DedupReviewLazy mode="correct" />
               </DedupAdminLayoutLazy>
             </ProtectedRoute>
           } />

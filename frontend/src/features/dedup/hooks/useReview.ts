@@ -1,11 +1,14 @@
 import { useCallback, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   claimItems,
+  correctPair,
   fetchAdjudicationItem,
   fetchAdjudicationQueue,
   fetchAdminAdjudications,
   fetchAdminOverview,
+  fetchAdminPair,
+  fetchAdminPairs,
   fetchAnnotatorItems,
   fetchAnnotators,
   fetchBatches,
@@ -22,9 +25,11 @@ import {
   updateSettings,
   type AdjudicationInput,
   type AdjudicationItem,
+  type CorrectionInput,
   type DecisionInput,
   type DiffGranularity,
   type MyItemsState,
+  type PairFilters,
   type ReviewItem,
   type ReviewMode,
 } from '../api/review';
@@ -53,6 +58,8 @@ const keys = {
   annotatorItems: (userId: string, state: MyItemsState) =>
     [...reviewQueryKeyRoot, 'admin', 'items', userId, state] as const,
   adminAdjudications: (state: MyItemsState) => [...reviewQueryKeyRoot, 'admin', 'adjudications', state] as const,
+  adminPair: (itemId: number) => [...reviewQueryKeyRoot, 'admin', 'pair', itemId] as const,
+  adminPairs: (filters: PairFilters) => [...reviewQueryKeyRoot, 'admin', 'pairs', filters] as const,
   settings: [...reviewQueryKeyRoot, 'admin', 'settings'] as const,
 };
 
@@ -324,5 +331,43 @@ export function useUpdateReviewMode() {
       queryClient.setQueryData(keys.settings, updated);
       queryClient.invalidateQueries({ queryKey: keys.adminRoot });
     },
+  });
+}
+
+/** A pair with its final answer and answer history, for the admin correction page. */
+export function useAdminPair(itemId: number | undefined) {
+  const valid = itemId != null && !Number.isNaN(itemId);
+  return useQuery({
+    queryKey: keys.adminPair(itemId ?? 0),
+    queryFn: ({ signal }) => fetchAdminPair(itemId!, { signal }),
+    enabled: valid,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function useCorrectPair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, fields }: { itemId: number; fields: CorrectionInput }) => correctPair(itemId, fields),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(keys.adminPair(updated.item_id), updated);
+      queryClient.invalidateQueries({ queryKey: keys.adminRoot });
+      // The annotator's and adjudicator's copies are now locked.
+      queryClient.invalidateQueries({ queryKey: keys.myItemsRoot });
+      queryClient.invalidateQueries({ queryKey: keys.item(updated.item_id) });
+      queryClient.invalidateQueries({ queryKey: keys.adjudicationRoot });
+    },
+  });
+}
+
+/** Every handed-out pair with its final answer, filtered and paged (admin pair list). */
+export function useAdminPairs(filters: PairFilters) {
+  return useQuery({
+    queryKey: keys.adminPairs(filters),
+    queryFn: ({ signal }) => fetchAdminPairs(filters, { signal }),
+    // Keeps the current page on screen while the next filter or page loads.
+    placeholderData: keepPreviousData,
+    staleTime: 0,
   });
 }
