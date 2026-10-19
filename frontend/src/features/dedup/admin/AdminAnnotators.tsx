@@ -6,12 +6,16 @@ import i18n from '@/i18n/config';
 import { useTranslation } from 'react-i18next';
 import { answerGroups, formatDateTime, formatDuration, formatNumber } from '../utils';
 import InfoTip from './InfoTip';
+import PeriodFilter from './PeriodFilter';
+import { usePeriod } from '../hooks/usePeriod';
 
 export default function AdminAnnotators() {
   const { t } = useTranslation();
-  const annotators = useAnnotators();
+  const period = usePeriod();
+  const annotators = useAnnotators(period.period);
   const navigate = useNavigate();
-  const open = (a: Annotator) => navigate(`/dedup-admin/annotators/${encodeURIComponent(a.user_id)}`);
+  // Keep the chosen period on the person's page.
+  const open = (a: Annotator) => navigate(`/dedup-admin/annotators/${encodeURIComponent(a.user_id)}${period.search}`);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -31,6 +35,11 @@ export default function AdminAnnotators() {
             <span className="h-2.5 w-2.5 rounded-full bg-gray-200" /> {t('dedup.admin.batch.bdrcStatus.new')}
           </li>
         </ul>
+      </div>
+
+      <div className="mt-4">
+        <PeriodFilter state={period} />
+        {period.filtered && <p className="mt-2 text-xs text-gray-500">{t('dedup.admin.period.annotatorsHint')}</p>}
       </div>
 
       {annotators.error && (
@@ -55,9 +64,10 @@ export default function AdminAnnotators() {
             >
               <Person a={a} />
               <div className="mt-3">
-                <Progress a={a} />
+                <Progress a={a} filtered={period.filtered} />
               </div>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                {a.changed > 0 && <span>{t('dedup.admin.annotators.card.changed', { n: formatNumber(a.changed) })}</span>}
                 <span>{t('dedup.admin.annotators.card.opened', { n: formatNumber(a.in_progress) })}</span>
                 <span>{t('dedup.admin.annotators.card.notOpened', { n: formatNumber(a.not_started) })}</span>
                 <span>{t('dedup.admin.annotators.card.total', { time: formatDuration(a.total_active_seconds) })}</span>
@@ -78,47 +88,17 @@ export default function AdminAnnotators() {
         <div className="mt-6 hidden overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm lg:block">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
-              <tr>
+              <tr className="whitespace-nowrap">
                 <th className="rounded-tl-lg px-4 py-3 font-medium">{t('dedup.admin.annotators.col.annotator')}</th>
-                <th className="px-3 py-3 font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.annotators.col.answered')}
-                    <InfoTip text={t('dedup.admin.annotators.col.answeredTip')} />
-                  </span>
-                </th>
-
-                <th className="px-3 py-3 text-right font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.annotators.col.opened')} <InfoTip text={t('dedup.admin.annotators.col.openedTip')} />
-                  </span>
-                </th>
-                <th className="px-3 py-3 text-right font-medium">{t('dedup.admin.annotators.col.notOpened')}</th>
-                <th className="px-3 py-3 text-right font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.annotators.col.totalTime')}
-                    <InfoTip
-                      text={t('dedup.admin.annotators.col.totalTimeTip')}
-                    />
-                  </span>
-                </th>
-                <th className="px-3 py-3 text-right font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.annotators.col.perPair')}
-                    <InfoTip text={t('dedup.admin.annotators.col.perPairTip')} />
-                  </span>
-                </th>
-                <th className="px-3 py-3 text-right font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.overview.agreement')}
-                    <InfoTip text={t('dedup.admin.annotators.col.agreementTip')} />
-                  </span>
-                </th>
-                <th className="px-3 py-3 text-right font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t('dedup.admin.overview.stat.adjudicated')} <InfoTip text={t('dedup.admin.annotators.col.adjudicatedTip')} />
-                  </span>
-                </th>
-                <th className="px-3 py-3 font-medium">{t('dedup.admin.annotators.col.lastActive')}</th>
+                <Th label={t('dedup.admin.annotators.col.answered')} tip={t('dedup.admin.annotators.col.answeredTip')} />
+                <Th label={t('dedup.admin.annotators.col.changed')} tip={t('dedup.admin.annotators.col.changedTip')} right />
+                <Th label={t('dedup.admin.annotators.col.waiting')} tip={t('dedup.admin.annotators.col.waitingTip')} right />
+                <Th label={t('dedup.admin.annotators.col.totalTime')} tip={t('dedup.admin.annotators.col.totalTimeTip')} right />
+                <Th label={t('dedup.admin.annotators.col.perPair')} tip={t('dedup.admin.annotators.col.perPairTip')} right />
+                <Th label={t('dedup.admin.overview.agreement')} tip={t('dedup.admin.annotators.col.agreementTip')} right />
+                <Th label={t('dedup.admin.overview.stat.adjudicated')} tip={t('dedup.admin.annotators.col.adjudicatedTip')} right />
+                {/* Under the name on smaller laptops, to keep the table from scrolling. */}
+                <th className="hidden px-3 py-3 font-medium xl:table-cell">{t('dedup.admin.annotators.col.lastActive')}</th>
                 <th className="w-8 rounded-tr-lg px-3 py-3" />
               </tr>
             </thead>
@@ -127,19 +107,25 @@ export default function AdminAnnotators() {
                 <tr key={a.user_id} onClick={() => open(a)} className="cursor-pointer hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Person a={a} />
+                    <div className="mt-1 pl-11 text-xs text-gray-400 xl:hidden">
+                      {t('dedup.admin.annotators.card.active', { when: formatDateTime(a.last_active) })}
+                    </div>
                   </td>
-                  <td className="w-56 px-3 py-3">
-                    <Progress a={a} />
+                  <td className="w-44 px-3 py-3">
+                    <Progress a={a} filtered={period.filtered} />
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-amber-700">{a.in_progress}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.not_started}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.changed ? formatNumber(a.changed) : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right text-xs">
+                    <div className="tabular-nums text-amber-700">{t('dedup.admin.annotators.card.opened', { n: formatNumber(a.in_progress) })}</div>
+                    <div className="tabular-nums text-gray-500">{t('dedup.admin.annotators.card.notOpened', { n: formatNumber(a.not_started) })}</div>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     {formatDuration(a.total_active_seconds || null)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{formatDuration(a.avg_active_seconds)}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{agreement(a)}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-gray-600">{a.adjudicated ? formatNumber(a.adjudicated) : '—'}</td>
-                  <td className="px-3 py-3 text-xs text-gray-500">
+                  <td className="hidden px-3 py-3 text-xs text-gray-500 xl:table-cell">
                     <LastActive iso={a.last_active} />
                   </td>
                   <td className="px-3 py-3 text-right">
@@ -152,6 +138,17 @@ export default function AdminAnnotators() {
         </div>
       )}
     </div>
+  );
+}
+
+/** A column heading kept on one line, with its explanation on hover. */
+function Th({ label, tip, right = false }: Readonly<{ label: string; tip: string; right?: boolean }>) {
+  return (
+    <th className={`px-3 py-3 font-medium ${right ? 'text-right' : ''}`}>
+      <span className="inline-flex items-center gap-1">
+        {label} <InfoTip text={tip} />
+      </span>
+    </th>
   );
 }
 
@@ -180,15 +177,19 @@ function agreement(a: Annotator): string {
 
 // Answered out of given, as one bar split by answer (same, different, …); the light
 // rest is not answered yet. One line below names the counts in the same colours.
-function Progress({ a }: Readonly<{ a: Annotator }>) {
+// For a period, "of how many" has no meaning: only the answers in it are shown.
+function Progress({ a, filtered = false }: Readonly<{ a: Annotator; filtered?: boolean }>) {
   const { t } = useTranslation();
   const groups = answerGroups(a.answers).filter((g) => g.n > 0);
-  const total = Math.max(a.assigned, groups.reduce((s, g) => s + g.n, 0));
+  const answered = groups.reduce((s, g) => s + g.n, 0);
+  const total = filtered ? answered : Math.max(a.assigned, answered);
   const hover = groups.map((g) => `${g.label}: ${formatNumber(g.n)}${g.detail ? ` (${g.detail})` : ''}`).join('\n');
   return (
     <div title={hover || undefined}>
       <div className="text-sm text-gray-700">
-        {t('dedup.admin.annotators.doneOf', { n: formatNumber(a.done), total: formatNumber(a.assigned) })}
+        {filtered
+          ? t('dedup.admin.period.answered', { n: formatNumber(a.done) })
+          : t('dedup.admin.annotators.doneOf', { n: formatNumber(a.done), total: formatNumber(a.assigned) })}
       </div>
       <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
         {groups.map((g) => (

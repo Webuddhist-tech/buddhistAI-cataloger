@@ -7,6 +7,7 @@ shared as a link.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -203,25 +204,36 @@ admin_router = APIRouter(prefix="/admin", dependencies=[Depends(require_dedup_ad
 
 
 @admin_router.get("/overview", response_model=AdminOverviewOut)
-def admin_overview(db: Session = Depends(get_db)):
-    """Batch progress, answers, abstentions, issues and sync health."""
-    return admin_ctrl.overview(db)
+def admin_overview(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    db: Session = Depends(get_db),
+):
+    """Batch progress, answers, abstentions, issues and sync health; ``since``/``until``
+    (until excluded) limit the work counts to a period."""
+    return admin_ctrl.overview(db, since, until)
 
 
 @admin_router.get("/annotators", response_model=list[AnnotatorOut])
-def admin_annotators(db: Session = Depends(get_db)):
-    """Work and time per annotator."""
-    return admin_ctrl.annotators(db)
+def admin_annotators(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    db: Session = Depends(get_db),
+):
+    """Work and time per annotator; ``since``/``until`` (until excluded) limit it to a period."""
+    return admin_ctrl.annotators(db, since, until)
 
 
 @admin_router.get("/annotators/{user_id}/items", response_model=list[ItemOut])
 def admin_annotator_items(
     user_id: str,
     state: Literal["open", "done", "all"] = "all",
+    since: datetime | None = None,
+    until: datetime | None = None,
     db: Session = Depends(get_db),
 ):
-    """One annotator's items."""
-    return admin_ctrl.annotator_items(db, user_id, state)
+    """One annotator's items; with ``since``/``until``, only those answered in that period."""
+    return admin_ctrl.annotator_items(db, user_id, state, since, until)
 
 
 @admin_router.post("/reassign", response_model=ReassignOut)

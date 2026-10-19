@@ -96,6 +96,10 @@ export interface ReviewItem {
   locked: boolean;
   // An admin corrected the pair's final answer.
   corrected: boolean;
+  // When the assignee last changed their answer, and how many times (saving the same
+  // answer again is not a change). The first answer's time is assignment.completed_at.
+  answer_changed_at: string | null;
+  answer_changes: number;
 }
 
 // Adjudication: pairs whose two annotators disagreed (or either said "can't answer").
@@ -344,6 +348,8 @@ export interface Annotator extends WorkCounts {
   agreed: number;
   // Pairs this person settled as adjudicator.
   adjudicated: number;
+  // Pairs whose answer this person changed after first answering (in the period, if chosen).
+  changed: number;
   // Their own current answer per pair, counted by verdict (same, different, contains, …).
   answers: Record<string, number>;
 }
@@ -368,16 +374,36 @@ export interface ReassignResult {
   skipped: number[];
 }
 
-export function fetchAdminOverview(opts?: { signal?: AbortSignal }) {
-  return request<AdminOverview>('/admin/overview', { signal: opts?.signal });
+/** A period as ISO instants (`until` excluded); both unset means all time. */
+export interface PeriodRange {
+  since?: string;
+  until?: string;
 }
 
-export function fetchAnnotators(opts?: { signal?: AbortSignal }) {
-  return request<Annotator[]>('/admin/annotators', { signal: opts?.signal });
+function periodQuery(period: PeriodRange | undefined, params = new URLSearchParams()): string {
+  if (period?.since) params.set('since', period.since);
+  if (period?.until) params.set('until', period.until);
+  const s = params.toString();
+  return s ? `?${s}` : '';
 }
 
-export function fetchAnnotatorItems(userId: string, state: MyItemsState, opts?: { signal?: AbortSignal }) {
-  return request<ReviewItem[]>(`/admin/annotators/${encodeURIComponent(userId)}/items?state=${state}`, {
+export function fetchAdminOverview(period?: PeriodRange, opts?: { signal?: AbortSignal }) {
+  return request<AdminOverview>(`/admin/overview${periodQuery(period)}`, { signal: opts?.signal });
+}
+
+export function fetchAnnotators(period?: PeriodRange, opts?: { signal?: AbortSignal }) {
+  return request<Annotator[]>(`/admin/annotators${periodQuery(period)}`, { signal: opts?.signal });
+}
+
+/** With a period, only the pairs answered in it. */
+export function fetchAnnotatorItems(
+  userId: string,
+  state: MyItemsState,
+  period?: PeriodRange,
+  opts?: { signal?: AbortSignal },
+) {
+  const query = periodQuery(period, new URLSearchParams({ state }));
+  return request<ReviewItem[]>(`/admin/annotators/${encodeURIComponent(userId)}/items${query}`, {
     signal: opts?.signal,
   });
 }

@@ -7,11 +7,14 @@ import type { AdminBatch, DoubleReviewCounts, ReviewMode, SyncHealth } from '../
 import { useAdminOverview, useDedupSettings, useUpdateReviewMode } from '../hooks/useReview';
 import { abstentionLabel, formatDateTime, formatNumber, issueLabel, resolutionLabel, verdictLabel } from '../utils';
 import InfoTip from './InfoTip';
+import PeriodFilter from './PeriodFilter';
+import { usePeriod } from '../hooks/usePeriod';
 
 
 export default function AdminOverview() {
   const { t } = useTranslation();
-  const overview = useAdminOverview();
+  const period = usePeriod();
+  const overview = useAdminOverview(period.period);
   const o = overview.data;
 
   return (
@@ -20,6 +23,11 @@ export default function AdminOverview() {
       <p className="mt-1 text-sm text-gray-600">{t('dedup.admin.overview.subtitle')}</p>
 
       <ReviewModeSwitch />
+
+      <div className="mt-6">
+        <PeriodFilter state={period} />
+        {period.filtered && <p className="mt-2 text-xs text-gray-500">{t('dedup.admin.period.overviewHint')}</p>}
+      </div>
 
       {overview.isLoading && <div className="mt-6 h-40 animate-pulse rounded-xl bg-gray-100" />}
       {overview.error && (

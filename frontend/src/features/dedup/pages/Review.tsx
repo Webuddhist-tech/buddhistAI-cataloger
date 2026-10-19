@@ -57,6 +57,8 @@ function correctionItem(p: AdminPair): ReviewItem {
     review_mode: p.review_mode,
     locked: false,
     corrected: p.corrected,
+    answer_changed_at: null,
+    answer_changes: 0,
   };
 }
 

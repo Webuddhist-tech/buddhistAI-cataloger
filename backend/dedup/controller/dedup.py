@@ -54,6 +54,7 @@ def _item_view(
     active_seconds: int = 0,
     locked: bool = False,
     corrected: bool = False,
+    changes: Optional[list[datetime]] = None,
 ) -> ItemOut:
     return ItemOut(
         item_id=item.item_id,
@@ -84,6 +85,8 @@ def _item_view(
         review_mode=item.review_mode,
         locked=locked or corrected,
         corrected=corrected,
+        answer_changed_at=changes[-1] if changes else None,
+        answer_changes=len(changes or []),
     )
 
 
@@ -101,6 +104,7 @@ def _views_for(db: Session, assignments: list[DedupAssignment]) -> list[ItemOut]
     corrected = repo.corrected_item_ids(db, ids)
     owners = {a.user_id for a in assignments}
     time = repo.active_seconds(db, next(iter(owners))) if len(owners) == 1 else repo.active_seconds(db)
+    changes = repo.answer_changes(db, ids)
     return [
         _item_view(
             items[a.item_id],
@@ -109,6 +113,7 @@ def _views_for(db: Session, assignments: list[DedupAssignment]) -> list[ItemOut]
             time.get((a.item_id, a.user_id), 0),
             _is_locked(items[a.item_id], answered.get(a.item_id, 0)),
             a.item_id in corrected,
+            changes.get((a.item_id, a.user_id)),
         )
         for a in assignments
         if a.item_id in items

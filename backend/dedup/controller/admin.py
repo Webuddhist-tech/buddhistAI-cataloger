@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from fastapi import HTTPException
@@ -63,21 +64,63 @@ def _counts(assignments: list[DedupAssignment]) -> WorkCounts:
     return WorkCounts(assigned=len(assignments), done=c["done"], in_progress=c["in_progress"], not_started=c["not_started"])
 
 
-def overview(db: Session) -> AdminOverviewOut:
+def utc_naive(t: Optional[datetime]) -> Optional[datetime]:
+    """Query-string times may carry an offset; the dedup tables store naive UTC."""
+    if t is None or t.tzinfo is None:
+        return t
+    return t.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _in_period(t: Optional[datetime], since: Optional[datetime], until: Optional[datetime]) -> bool:
+    """``until`` excluded; an unset end is open."""
+    return t is not None and (since is None or t >= since) and (until is None or t < until)
+
+
+def overview(db: Session, since: Optional[datetime] = None, until: Optional[datetime] = None) -> AdminOverviewOut:
+    """With ``since``/``until`` (``until`` excluded), the work done in that period:
+    pairs given out and answered, final answers, pairs both annotators finished, and
+    adjudications settled. What is waiting now (opened, not opened, awaiting a second
+    answer, adjudication waiting or under way), batch progress and sync stay as they are."""
     try:
         batches = client.list_batches()
         stats = client.batch_stats()
     except ReviewApiError as exc:
         raise bdrc_error(exc) from exc
+    since, until = utc_naive(since), utc_naive(until)
+    filtered = since is not None or until is not None
+    in_period = partial(_in_period, since=since, until=until)
+
     ours = repo.assignment_counts_by_batch(db)
     decisions = repo.latest_decision_per_item(db)
+    assignments = repo.all_assignments(db)
+    totals = _counts(assignments)
+    double_review = repo.double_review_counts(db)
+    adjudications = repo.all_adjudications(db)
+    if filtered:
+        decisions = [d for d in decisions if in_period(d.decided_at)]
+        totals.assigned = sum(1 for a in assignments if in_period(a.assigned_at))
+        totals.done = sum(1 for a in assignments if in_period(a.completed_at))
+        adjudications = [a for a in adjudications if in_period(a.completed_at)]
+        # A pair counts as "both answered" on the day the second answer came in.
+        finished_at = {(a.item_id, a.user_id): a.completed_at for a in assignments if a.completed_at}
+        disputed = {a.item_id for a in repo.all_adjudications(db)}
+        both = [
+            item_id for item_id, uids in repo.answered_pairs(db)
+            if all(finished_at.get((item_id, u)) for u in uids)
+            and in_period(max(finished_at[(item_id, u)] for u in uids))
+        ]
+        double_review.update(
+            both_answered=len(both),
+            agreed=sum(1 for i in both if i not in disputed),
+            adjudicated=len(adjudications),
+        )
 
     verdicts = Counter(d.verdict for d in decisions if d.verdict)
     reasons = Counter(d.abstention_reason for d in decisions if d.abstention_reason)
     issues = Counter(i.get("kind") for d in decisions for i in (d.issues or []) if i.get("kind"))
 
     return AdminOverviewOut(
-        totals=_counts(repo.all_assignments(db)),
+        totals=totals,
         batches=[
             AdminBatchOut(
                 batch_id=b["batch_id"],
@@ -95,8 +138,8 @@ def overview(db: Session) -> AdminOverviewOut:
         issues=dict(issues),
         sync=SyncHealthOut(**repo.sync_health(db)),
         double_review=DoubleReviewCounts(
-            **repo.double_review_counts(db),
-            resolutions=dict(Counter(a.resolution for a in repo.all_adjudications(db) if a.resolution)),
+            **double_review,
+            resolutions=dict(Counter(a.resolution for a in adjudications if a.resolution)),
         ),
     )
 
@@ -106,26 +149,53 @@ def _dedup_users(db: Session) -> list[User]:
     return [u for u in rows if has_dedup_access(u)]
 
 
-def annotators(db: Session) -> list[AnnotatorOut]:
-    """Everyone with dedup access, plus anyone still holding items after losing it."""
+def annotators(
+    db: Session, since: Optional[datetime] = None, until: Optional[datetime] = None
+) -> list[AnnotatorOut]:
+    """Everyone with dedup access, plus anyone still holding items after losing it.
+
+    With ``since``/``until`` (``until`` excluded), answered (first answers), answers,
+    changed, agreement, adjudicated and time count only that period; opened / not
+    opened stay what is waiting now. A pair's time counts when it was answered (or
+    settled), or when it was last worked on if it is not finished: time is stored as one
+    total per pair.
+    """
+    since, until = utc_naive(since), utc_naive(until)
+    filtered = since is not None or until is not None
+    in_period = partial(_in_period, since=since, until=until)
+
+    all_assignments = repo.all_assignments(db)
     by_user: dict[str, list[DedupAssignment]] = {}
-    for a in repo.all_assignments(db):
+    for a in all_assignments:
         by_user.setdefault(a.user_id, []).append(a)
+    finished_at = {(a.item_id, a.user_id): a.completed_at for a in all_assignments if a.completed_at}
+    all_adjudications = repo.all_adjudications(db)
+    finished_at.update({(a.item_id, a.user_id): a.completed_at for a in all_adjudications if a.user_id and a.completed_at})
 
     last_answer = repo.last_decision_by_user(db)
-    disputed = {a.item_id for a in repo.all_adjudications(db)}
+    disputed = {a.item_id for a in all_adjudications}
     paired: Counter[str] = Counter()
     agreed: Counter[str] = Counter()
     for item_id, uids in repo.answered_pairs(db):
         for uid in uids:
+            if filtered and not in_period(finished_at.get((item_id, uid))):
+                continue
             paired[uid] += 1
             agreed[uid] += item_id not in disputed
-    adjudicated = Counter(a.user_id for a in repo.all_adjudications(db) if a.completed_at)
-    answers = repo.answer_counts_by_user(db)
-    time = repo.active_seconds(db)
+    adjudicated = Counter(
+        a.user_id for a in all_adjudications if a.completed_at and (not filtered or in_period(a.completed_at))
+    )
+    answers = repo.answer_counts_by_user(db, since, until)
+    changed = Counter(
+        uid for (_, uid), whens in repo.answer_changes(db).items() if any(not filtered or in_period(w) for w in whens)
+    )
+    time: dict[tuple[int, str], int] = {}
     total_by_user: dict[str, int] = {}
-    for (_, u), s in time.items():
-        total_by_user[u] = total_by_user.get(u, 0) + s
+    for row in repo.all_active_time(db):
+        if filtered and not in_period(finished_at.get((row.item_id, row.user_id)) or row.updated_at):
+            continue
+        time[(row.item_id, row.user_id)] = row.seconds
+        total_by_user[row.user_id] = total_by_user.get(row.user_id, 0) + row.seconds
     users = {u.id: u for u in _dedup_users(db)}
     missing = (set(by_user) | set(total_by_user)) - set(users)
     if missing:
@@ -139,9 +209,13 @@ def annotators(db: Session) -> list[AnnotatorOut]:
         stamps = [t for a in mine for t in (a.assigned_at, a.first_opened_at, a.completed_at) if t]
         if uid in last_answer:
             stamps.append(last_answer[uid])
+        counts = _counts(mine)
+        if filtered:
+            counts.done = sum(1 for a in mine if in_period(a.completed_at))
+            counts.assigned = counts.done + counts.in_progress + counts.not_started
         out.append(
             AnnotatorOut(
-                **_counts(mine).model_dump(),
+                **counts.model_dump(),
                 user_id=uid,
                 name=u.name,
                 email=u.email,
@@ -154,6 +228,7 @@ def annotators(db: Session) -> list[AnnotatorOut]:
                 paired=paired[uid],
                 agreed=agreed[uid],
                 adjudicated=adjudicated[uid],
+                changed=changed[uid],
                 answers=answers.get(uid, {}),
             )
         )
@@ -161,8 +236,26 @@ def annotators(db: Session) -> list[AnnotatorOut]:
     return out
 
 
-def annotator_items(db: Session, user_id: str, state: str) -> list[ItemOut]:
-    return _views_for(db, repo.user_assignments(db, user_id, None, state=state))
+def annotator_items(
+    db: Session, user_id: str, state: str, since: Optional[datetime] = None, until: Optional[datetime] = None
+) -> list[ItemOut]:
+    """With ``since``/``until``, only the pairs this person first answered, or changed
+    their answer on, in that period."""
+    since, until = utc_naive(since), utc_naive(until)
+    if since is None and until is None:
+        return _views_for(db, repo.user_assignments(db, user_id, None, state=state))
+
+    in_period = partial(_in_period, since=since, until=until)
+
+    done = repo.user_assignments(db, user_id, None, state="done")
+    changes = repo.answer_changes(db, [a.item_id for a in done])
+    return _views_for(
+        db,
+        [
+            a for a in done
+            if in_period(a.completed_at) or any(in_period(w) for w in changes.get((a.item_id, user_id), []))
+        ],
+    )
 
 
 def reassign(db: Session, admin: User, body: ReassignIn) -> ReassignOut:

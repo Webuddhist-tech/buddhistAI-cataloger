@@ -116,6 +116,11 @@ class ItemOut(BaseModel):
     decided_at: Optional[datetime] = None
     sync_state: Optional[str] = None
     assignment: Optional[AssignmentOut] = None
+    # When the assignee last changed their answer after first answering, and how many
+    # times (saving the same answer again is not a change). The first answer's time is
+    # assignment.completed_at.
+    answer_changed_at: Optional[datetime] = None
+    answer_changes: int = 0
     # "single" (answer is final) or "double" (two annotators, then an adjudicator if
     # they disagree).
     review_mode: str = "single"
@@ -316,6 +321,9 @@ class AnnotatorOut(WorkCounts):
     agreed: int = 0
     # Pairs this person settled as adjudicator.
     adjudicated: int = 0
+    # Pairs whose answer this person changed after first answering (in the period, if one
+    # is chosen). Saving the same answer again is not a change.
+    changed: int = 0
     # Their own current answer per pair they annotated, counted by verdict
     # (same | different | contains | part_of | source_dup | not_sure).
     answers: dict[str, int] = Field(default_factory=dict)

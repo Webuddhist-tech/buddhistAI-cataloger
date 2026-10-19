@@ -14,10 +14,12 @@ import {
 } from '@/components/ui/dialog';
 import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdminOverview, useAnnotatorItems, useAnnotators, useReassign } from '../hooks/useReview';
-import { answerLabel, batchNames, formatNumber, hasIssue, isDecided } from '../utils';
+import { answerLabel, batchNames, formatDateTime, formatNumber, hasIssue, isDecided } from '../utils';
 import { Person } from './AdminAnnotators';
 import AnswerCounts from './AnswerCounts';
 import InfoTip from './InfoTip';
+import PeriodFilter from './PeriodFilter';
+import { usePeriod } from '../hooks/usePeriod';
 
 const TABS: MyItemsState[] = ['all', 'open', 'done'];
 
@@ -34,8 +36,10 @@ export default function AdminAnnotator() {
   const [target, setTarget] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
 
-  const annotators = useAnnotators();
-  const items = useAnnotatorItems(userId, state);
+  const period = usePeriod();
+  const annotators = useAnnotators(period.period);
+  // A period lists the pairs answered in it, so the tabs have no meaning then.
+  const items = useAnnotatorItems(userId, period.filtered ? 'done' : state, period.period);
   const overview = useAdminOverview();
   const reassign = useReassign();
 
@@ -96,7 +100,7 @@ export default function AdminAnnotator() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8" style={{ paddingBottom: n ? 112 : undefined }}>
-      <Link to="/dedup-admin/annotators" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+      <Link to={`/dedup-admin/annotators${period.search}`} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
         <ArrowLeft className="h-4 w-4" /> {t('dedup.admin.nav.annotators')}
       </Link>
 
@@ -107,6 +111,11 @@ export default function AdminAnnotator() {
             <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">
               {t('dedup.admin.batch.answered', { n: formatNumber(person.done) })}
             </span>
+            {person.changed > 0 && (
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                {t('dedup.admin.annotators.card.changed', { n: formatNumber(person.changed) })}
+              </span>
+            )}
             <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">
               {t('dedup.admin.annotators.card.opened', { n: formatNumber(person.in_progress) })}
             </span>
@@ -125,26 +134,33 @@ export default function AdminAnnotator() {
         </div>
       )}
 
-      <div className="mt-5 mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
-          {TABS.map((key) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={state === key}
-              onClick={() => setState(key)}
-              className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-colors ${
-                state === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {t(`dedup.queue.tab.${key}`)}
-            </button>
-          ))}
-        </div>
-        <p className="inline-flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-          {t('dedup.admin.annotator.tickHint')} <Lock className="h-3.5 w-3.5" /> {t('dedup.admin.annotator.answeredStay')}
-        </p>
+      <div className={period.filtered ? 'mt-4 mb-3' : 'mt-4'}>
+        <PeriodFilter state={period} />
+        {period.filtered && <p className="mt-2 text-xs text-gray-500">{t('dedup.admin.period.annotatorHint')}</p>}
       </div>
+
+      {!period.filtered && (
+        <div className="mt-5 mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-md bg-gray-100 p-1" role="tablist">
+            {TABS.map((key) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={state === key}
+                onClick={() => setState(key)}
+                className={`cursor-pointer rounded px-3 py-1 text-sm font-medium transition-colors ${
+                  state === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {t(`dedup.queue.tab.${key}`)}
+              </button>
+            ))}
+          </div>
+          <p className="inline-flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+            {t('dedup.admin.annotator.tickHint')} <Lock className="h-3.5 w-3.5" /> {t('dedup.admin.annotator.answeredStay')}
+          </p>
+        </div>
+      )}
 
       {items.error && (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -198,6 +214,12 @@ export default function AdminAnnotator() {
                   <div className="break-words font-monlam text-sm leading-relaxed text-gray-500">
                     {it.evidence.b?.title_bo || '—'}
                   </div>
+                  {finished && (
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-500">
+                      <span>{t('dedup.admin.annotator.answeredOn', { when: formatDateTime(it.assignment?.completed_at) })}</span>
+                      {it.answer_changed_at && <ChangedOn item={it} />}
+                    </div>
+                  )}
                 </div>
               </div>
             </li>
@@ -212,7 +234,7 @@ export default function AdminAnnotator() {
       <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm sm:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
+            <tr className="whitespace-nowrap">
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
@@ -228,6 +250,16 @@ export default function AdminAnnotator() {
               <th className="px-3 py-3 font-medium">{t('dedup.admin.annotator.pair')}</th>
               <th className="px-3 py-3 font-medium">{t('dedup.common.texts')}</th>
               <th className="hidden px-3 py-3 font-medium md:table-cell">{t('dedup.common.batch')}</th>
+              <th className="hidden px-3 py-3 font-medium lg:table-cell">
+                <span className="inline-flex items-center gap-1">
+                  {t('dedup.admin.annotator.answeredCol')} <InfoTip text={t('dedup.admin.annotator.answeredColTip')} />
+                </span>
+              </th>
+              <th className="hidden px-3 py-3 font-medium lg:table-cell">
+                <span className="inline-flex items-center gap-1">
+                  {t('dedup.admin.annotator.changedCol')} <InfoTip text={t('dedup.admin.annotator.changedColTip')} />
+                </span>
+              </th>
               <th className="px-3 py-3 font-medium">{t('dedup.common.status')}</th>
             </tr>
           </thead>
@@ -235,7 +267,7 @@ export default function AdminAnnotator() {
             {items.isLoading &&
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={5} className="px-4 py-3">
+                  <td colSpan={7} className="px-4 py-3">
                     <div className="h-8 animate-pulse rounded bg-gray-100" />
                   </td>
                 </tr>
@@ -276,9 +308,22 @@ export default function AdminAnnotator() {
                     <div className={`break-words font-monlam text-sm leading-relaxed ${finished ? 'text-gray-400' : 'text-gray-500'}`}>
                       {it.evidence.b?.title_bo || '—'}
                     </div>
+                    {/* Tablets: the date columns would not fit, so the dates go here. */}
+                    {finished && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-500 lg:hidden">
+                        <span>{t('dedup.admin.annotator.answeredOn', { when: formatDateTime(it.assignment?.completed_at) })}</span>
+                        {it.answer_changed_at && <ChangedOn item={it} />}
+                      </div>
+                    )}
                   </td>
                   <td className="hidden whitespace-nowrap px-3 py-3 text-gray-600 md:table-cell" title={it.batch_id}>
                     {names[it.batch_id] ?? it.batch_id}
+                  </td>
+                  <td className="hidden whitespace-nowrap px-3 py-3 text-xs text-gray-500 lg:table-cell">
+                    {it.assignment?.completed_at ? formatDateTime(it.assignment.completed_at) : '—'}
+                  </td>
+                  <td className="hidden whitespace-nowrap px-3 py-3 text-xs text-gray-500 lg:table-cell">
+                    {it.answer_changed_at ? <ChangedOn item={it} short /> : '—'}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
                     <ItemStatus item={it} />
@@ -364,6 +409,14 @@ export default function AdminAnnotator() {
       </Dialog>
     </div>
   );
+}
+
+/** Latest change of the person's own answer, and how many times they changed it. */
+function ChangedOn({ item, short = false }: Readonly<{ item: ReviewItem; short?: boolean }>) {
+  const { t } = useTranslation();
+  const when = formatDateTime(item.answer_changed_at);
+  const times = item.answer_changes > 1 ? ` (${t('dedup.admin.annotator.changedTimes', { n: formatNumber(item.answer_changes) })})` : '';
+  return <span>{short ? `${when}${times}` : t('dedup.admin.annotator.changedOn', { when }) + times}</span>;
 }
 
 // Same colours as the answer buttons and the answer counts.
