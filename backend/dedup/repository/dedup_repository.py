@@ -16,6 +16,7 @@ from dedup.models.dedup import (
     MODE_SINGLE,
     SETTING_REVIEW_MODE,
     ROLE_ADJUDICATOR,
+    ROLE_ADMIN_CORRECTION,
     ROLE_ANNOTATOR,
     RETRY_BACKOFF_SECONDS,
     SYNC_FAILED,
@@ -246,6 +247,10 @@ def active_seconds(db: Session, user_id: Optional[str] = None) -> dict[tuple[int
     return {(i, u): s for i, u, s in db.execute(q).all()}
 
 
+def all_active_time(db: Session) -> list[DedupActiveTime]:
+    return list(db.execute(select(DedupActiveTime)).scalars().all())
+
+
 def mark_opened(db: Session, assignment: DedupAssignment) -> None:
     if assignment.first_opened_at is None:
         assignment.first_opened_at = datetime.utcnow()
@@ -301,11 +306,15 @@ def annotator_answers(db: Session, item_id: int) -> dict[int, DedupDecision]:
     return annotator_answers_for(db, [item_id])[item_id]
 
 
-def answer_counts_by_user(db: Session) -> dict[str, dict[str, int]]:
+def answer_counts_by_user(
+    db: Session, since: Optional[datetime] = None, until: Optional[datetime] = None
+) -> dict[str, dict[str, int]]:
     """``{user_id: {verdict: n}}``: each annotator's own current answer per pair (a
-    changed answer counts once, as its latest verdict; adjudicator answers excluded)."""
+    changed answer counts once, as its latest verdict; adjudicator answers excluded).
+    ``since``/``until`` keep only pairs the person answered in that period."""
     latest = (
         select(
+            DedupDecision.item_id,
             DedupDecision.user_id,
             DedupDecision.verdict,
             func.row_number()
@@ -315,14 +324,56 @@ def answer_counts_by_user(db: Session) -> dict[str, dict[str, int]]:
         .where(DedupDecision.role == ROLE_ANNOTATOR)
         .subquery()
     )
-    rows = db.execute(
+    q = (
         select(latest.c.user_id, latest.c.verdict, func.count())
         .where(latest.c.rn == 1, latest.c.verdict.is_not(None))
         .group_by(latest.c.user_id, latest.c.verdict)
-    ).all()
+    )
+    if since is not None or until is not None:
+        # Same period test as the "answered" count: when the person's slot was completed.
+        q = q.join(
+            DedupAssignment,
+            (DedupAssignment.item_id == latest.c.item_id) & (DedupAssignment.user_id == latest.c.user_id),
+        )
+        if since is not None:
+            q = q.where(DedupAssignment.completed_at >= since)
+        if until is not None:
+            q = q.where(DedupAssignment.completed_at < until)
+    rows = db.execute(q).all()
     out: dict[str, dict[str, int]] = {}
     for uid, verdict, n in rows:
         out.setdefault(uid, {})[verdict] = n
+    return out
+
+
+def answer_changes(
+    db: Session, item_ids: Optional[Iterable[int]] = None
+) -> dict[tuple[int, str], list[datetime]]:
+    """``{(item_id, user_id): [when, …]}``: each time an annotator changed their own
+    answer on a pair, oldest first. A save that keeps the same answer (e.g. only reports
+    a problem) is not a change, and neither is the first answer."""
+    q = select(
+        DedupDecision.item_id,
+        DedupDecision.user_id,
+        DedupDecision.verdict,
+        DedupDecision.abstention_reason,
+        DedupDecision.decided_at,
+    ).where(DedupDecision.role == ROLE_ANNOTATOR)
+    if item_ids is not None:
+        ids = list(item_ids)
+        if not ids:
+            return {}
+        q = q.where(DedupDecision.item_id.in_(ids))
+    rows = db.execute(
+        q.order_by(DedupDecision.item_id, DedupDecision.user_id, DedupDecision.decided_at, DedupDecision.created_at)
+    ).all()
+    out: dict[tuple[int, str], list[datetime]] = {}
+    prev: dict[tuple[int, str], tuple[Optional[str], Optional[str]]] = {}
+    for item_id, uid, verdict, reason, when in rows:
+        key = (item_id, uid)
+        if key in prev and prev[key] != (verdict, reason):
+            out.setdefault(key, []).append(when)
+        prev[key] = (verdict, reason)
     return out
 
 
@@ -509,6 +560,120 @@ def latest_decision_per_item(db: Session) -> list[DedupDecision]:
     return list(
         db.execute(
             select(DedupDecision).join(ranked, ranked.c.id == DedupDecision.id).where(ranked.c.rn == 1)
+        ).scalars().all()
+    )
+
+
+def final_decision(db: Session, item_id: int) -> Optional[DedupDecision]:
+    """The item's current final answer, whoever gave it (annotator, adjudicator or admin)."""
+    return db.execute(
+        select(DedupDecision)
+        .where(DedupDecision.item_id == item_id, DedupDecision.is_final.is_(True))
+        .order_by(*_NEWEST_FIRST)
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def decision_history(db: Session, item_id: int) -> list[DedupDecision]:
+    """Every answer ever saved on the item, oldest first."""
+    return list(
+        db.execute(
+            select(DedupDecision)
+            .where(DedupDecision.item_id == item_id)
+            .order_by(DedupDecision.decided_at, DedupDecision.created_at)
+        ).scalars().all()
+    )
+
+
+PAIR_SORTS = ("newest", "oldest", "id_desc", "id_asc")
+
+
+def search_pairs(
+    db: Session,
+    *,
+    batch_id: Optional[str] = None,
+    verdict: Optional[str] = None,
+    annotator_id: Optional[str] = None,
+    corrected: Optional[bool] = None,
+    q: Optional[str] = None,
+    sort: str = "newest",
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[tuple[DedupItem, Optional[DedupDecision]]], int]:
+    """Handed-out pairs with their current final answer (None if unanswered), filtered,
+    sorted and paged, plus the total before paging.
+
+    ``verdict`` "none" means no final answer yet; ``annotator_id`` is anyone assigned to
+    the pair; ``q`` is a pair number, or part of a batch id, an MW id or a title.
+    """
+    ranked = (
+        select(
+            DedupDecision.id.label("id"),
+            DedupDecision.item_id.label("item_id"),
+            func.row_number().over(partition_by=DedupDecision.item_id, order_by=_NEWEST_FIRST).label("rn"),
+        )
+        .where(DedupDecision.is_final.is_(True))
+        .subquery()
+    )
+    final = aliased(DedupDecision)
+    stmt = (
+        select(DedupItem, final)
+        .outerjoin(ranked, (ranked.c.item_id == DedupItem.item_id) & (ranked.c.rn == 1))
+        .outerjoin(final, final.id == ranked.c.id)
+    )
+    if batch_id:
+        stmt = stmt.where(DedupItem.batch_id == batch_id)
+    if verdict == "none":
+        stmt = stmt.where(final.id.is_(None))
+    elif verdict:
+        stmt = stmt.where(final.verdict == verdict)
+    if annotator_id:
+        stmt = stmt.where(
+            select(DedupAssignment.id)
+            .where(DedupAssignment.item_id == DedupItem.item_id, DedupAssignment.user_id == annotator_id)
+            .exists()
+        )
+    if corrected is not None:
+        was_corrected = (
+            select(DedupDecision.id)
+            .where(DedupDecision.item_id == DedupItem.item_id, DedupDecision.role == ROLE_ADMIN_CORRECTION)
+            .exists()
+        )
+        stmt = stmt.where(was_corrected if corrected else ~was_corrected)
+    q = (q or "").strip().lstrip("#")
+    if q.isdigit():
+        stmt = stmt.where(DedupItem.item_id == int(q))
+    elif q:
+        like = f"%{q}%"
+        stmt = stmt.where(
+            DedupItem.batch_id.ilike(like)
+            | DedupItem.subject["a_mw"].as_string().ilike(like)
+            | DedupItem.subject["b_mw"].as_string().ilike(like)
+            | DedupItem.evidence[("a", "title_bo")].as_string().ilike(like)
+            | DedupItem.evidence[("b", "title_bo")].as_string().ilike(like)
+        )
+
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    order = {
+        "newest": (final.decided_at.desc().nulls_last(), DedupItem.item_id.desc()),
+        "oldest": (final.decided_at.asc().nulls_last(), DedupItem.item_id.asc()),
+        "id_desc": (DedupItem.item_id.desc(),),
+        "id_asc": (DedupItem.item_id.asc(),),
+    }[sort]
+    rows = db.execute(stmt.order_by(*order).offset(offset).limit(limit)).all()
+    return [(item, decision) for item, decision in rows], total
+
+
+def corrected_item_ids(db: Session, item_ids: Iterable[int]) -> set[int]:
+    """The items an admin has corrected; nobody else may change their answer after that."""
+    ids = list(item_ids)
+    if not ids:
+        return set()
+    return set(
+        db.execute(
+            select(DedupDecision.item_id)
+            .where(DedupDecision.item_id.in_(ids), DedupDecision.role == ROLE_ADMIN_CORRECTION)
+            .distinct()
         ).scalars().all()
     )
 

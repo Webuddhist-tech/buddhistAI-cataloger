@@ -7,6 +7,7 @@ shared as a link.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -27,9 +28,12 @@ from dedup.schemas import (
     AdjudicationReassignIn,
     AdminAdjudicationOut,
     AdminOverviewOut,
+    AdminPairListOut,
+    AdminPairOut,
     AnnotatorOut,
     BatchOut,
     ClaimOut,
+    CorrectionIn,
     DecisionIn,
     ItemOut,
     PairOut,
@@ -200,25 +204,36 @@ admin_router = APIRouter(prefix="/admin", dependencies=[Depends(require_dedup_ad
 
 
 @admin_router.get("/overview", response_model=AdminOverviewOut)
-def admin_overview(db: Session = Depends(get_db)):
-    """Batch progress, answers, abstentions, issues and sync health."""
-    return admin_ctrl.overview(db)
+def admin_overview(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    db: Session = Depends(get_db),
+):
+    """Batch progress, answers, abstentions, issues and sync health; ``since``/``until``
+    (until excluded) limit the work counts to a period."""
+    return admin_ctrl.overview(db, since, until)
 
 
 @admin_router.get("/annotators", response_model=list[AnnotatorOut])
-def admin_annotators(db: Session = Depends(get_db)):
-    """Work and time per annotator."""
-    return admin_ctrl.annotators(db)
+def admin_annotators(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    db: Session = Depends(get_db),
+):
+    """Work and time per annotator; ``since``/``until`` (until excluded) limit it to a period."""
+    return admin_ctrl.annotators(db, since, until)
 
 
 @admin_router.get("/annotators/{user_id}/items", response_model=list[ItemOut])
 def admin_annotator_items(
     user_id: str,
     state: Literal["open", "done", "all"] = "all",
+    since: datetime | None = None,
+    until: datetime | None = None,
     db: Session = Depends(get_db),
 ):
-    """One annotator's items."""
-    return admin_ctrl.annotator_items(db, user_id, state)
+    """One annotator's items; with ``since``/``until``, only those answered in that period."""
+    return admin_ctrl.annotator_items(db, user_id, state, since, until)
 
 
 @admin_router.post("/reassign", response_model=ReassignOut)
@@ -249,6 +264,46 @@ def admin_reassign_adjudications(
 ):
     """Hand unsettled disputed pairs to another adjudicator, or back to the queue (to_user_id null)."""
     return admin_ctrl.reassign_adjudications(db, admin, body)
+
+
+@admin_router.get("/pairs", response_model=AdminPairListOut)
+def admin_pairs(
+    batch_id: str | None = None,
+    verdict: Literal["same", "different", "contains", "part_of", "source_dup", "not_sure", "none"] | None = None,
+    annotator_id: str | None = None,
+    corrected: bool | None = None,
+    q: str | None = Query(None, max_length=200),
+    sort: Literal["newest", "oldest", "id_desc", "id_asc"] = "newest",
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Every handed-out pair with its current final answer, filtered and sorted.
+    ``verdict=none``: no final answer yet. ``q``: a pair number, or part of a batch id, MW id or title."""
+    return admin_ctrl.list_pairs(
+        db, batch_id=batch_id, verdict=verdict, annotator_id=annotator_id, corrected=corrected,
+        q=q, sort=sort, offset=offset, limit=limit,
+    )
+
+
+@admin_router.get("/pairs/{item_id}", response_model=AdminPairOut)
+def admin_pair(item_id: int, db: Session = Depends(get_db)):
+    """One pair with its current final answer and every answer saved on it, for the
+    admin correction page. The shared ``/pairs/{item_id}`` page stays answer-free."""
+    return admin_ctrl.pair(db, item_id)
+
+
+@admin_router.post("/pairs/{item_id}/correction", response_model=AdminPairOut)
+def admin_correct_pair(
+    item_id: int,
+    body: CorrectionIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_dedup_admin),
+):
+    """Replace the pair's final answer with the admin's; it is pushed to BDRC in the
+    background. Earlier answers stay in the history, and the pair is locked for
+    annotators and adjudicators from then on."""
+    return admin_ctrl.correct_pair(db, admin, item_id, body)
 
 
 @admin_router.get("/settings", response_model=SettingsOut)

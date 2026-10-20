@@ -804,7 +804,8 @@
       "sided_with_1": "Agreed with annotator 1",
       "sided_with_2": "Agreed with annotator 2",
       "new_label": "Chose a different answer",
-      "unresolved": "Unresolved (also could not answer)"
+      "unresolved": "Unresolved (also could not answer)",
+      "admin_corrected": "Corrected by an admin"
     },
     "answer": {
       "cantAnswer": "Can't answer",
@@ -1089,7 +1090,9 @@
       "reportProblem": "Report a data problem",
       "spaceKey": "Space",
       "confidence": "Confidence",
-      "confidenceN": "Confidence {{n}} of 5"
+      "confidenceN": "Confidence {{n}} of 5",
+      "correctedInfo": "An admin corrected this pair, so it is locked.",
+      "correctedLocked": "An admin corrected this pair, so this answer is locked"
     },
     "adjudicationQueue": {
       "title": "To adjudicate",
@@ -1215,7 +1218,8 @@
         "overview": "Overview",
         "annotators": "Annotators",
         "adjudications": "Adjudications",
-        "users": "Users"
+        "users": "Users",
+        "pairs": "Pairs"
       },
       "users": {
         "subtitle": "Manage Deduplicator roles and access. Separate from Outliner roles.",
@@ -1239,12 +1243,28 @@
       "adminsOnly": "Admins only.",
       "singleOn": "Single review is on",
       "singleOnHint": "New pairs get one annotator.",
+      "period": {
+        "label": "Time period",
+        "all": "All time",
+        "today": "Today",
+        "7d": "Last 7 days",
+        "30d": "Last 30 days",
+        "custom": "Custom",
+        "from": "From",
+        "to": "To",
+        "apply": "Apply",
+        "answered": "{{n}} answered",
+        "annotatorsHint": "Answered counts pairs first answered in this period; Changed counts pairs whose answer was changed in it. Answers, time, agreement and adjudicated also count only this period. Opened and Not opened show what is waiting now. A pair's time counts on the day it was answered.",
+        "overviewHint": "Given out, Answered, Final answers, Couldn't answer, Data problems reported, Agreed, Agreement, Adjudicated and How disputes were settled count only this period (a pair counts as agreed on the day its second answer came in). Opened, Not opened, Waiting for 2nd annotator, Waiting for adjudication, Being adjudicated and the batch table show how things stand now.",
+        "annotatorHint": "Showing the pairs first answered, or changed, in this period. Choose “All time” to see unfinished pairs and move them."
+      },
       "annotators": {
         "subtitle": "Open a person to see their pairs or move unfinished ones.",
         "legend": "Answer colours",
         "loadFailed": "Could not load annotators: {{error}}",
         "nobody": "Nobody can use the Deduplicator yet. Give the “dedup” permission in Admin → Users.",
         "card": {
+          "changed": "{{n}} changed",
           "opened": "{{n}} opened",
           "notOpened": "{{n}} not opened",
           "total": "{{time}} in total",
@@ -1257,11 +1277,15 @@
           "annotator": "Annotator",
           "answered": "Answered",
           "answeredTip": "Pairs answered out of those given, and how many with each option (their own latest answer per pair; a changed answer counts once).",
+          "changed": "Changed",
+          "changedTip": "Pairs where this person later changed their own answer. Saving the same answer again, or only reporting a problem, is not a change. With a time period, counts pairs changed in it.",
+          "waiting": "Not answered",
+          "waitingTip": "Pairs given to this person that are not answered yet: opened ones, and ones never opened. Always shows how things stand now, whatever time period is chosen.",
           "opened": "Opened",
           "openedTip": "Opened but not answered yet.",
           "notOpened": "Not opened",
           "totalTime": "Total time",
-          "totalTimeTip": "Time spent working on pairs: counted only while a pair is on screen and in use. Leaving the tab or 5 minutes without any activity pauses it.",
+          "totalTimeTip": "Time spent working on pairs: counted only while a pair is on screen and in use. Leaving the tab or 2.5 minutes without any activity pauses it.",
           "perPair": "Per pair",
           "perPairTip": "Average working time per answered pair, including any return visits.",
           "agreementTip": "Of the pairs this person and their partner both answered, how many they answered the same. Low agreement can mean the person needs help, or that the pairs were hard.",
@@ -1275,6 +1299,13 @@
         "accessRemoved": "access removed"
       },
       "annotator": {
+        "answeredCol": "Answered",
+        "answeredColTip": "When this person first answered the pair.",
+        "changedCol": "Changed",
+        "changedColTip": "When this person last changed their answer, and how many times. Saving the same answer again is not a change.",
+        "answeredOn": "Answered {{when}}",
+        "changedOn": "Changed {{when}}",
+        "changedTimes": "{{n}} times",
         "moved_one": "{{n}} pair moved to {{name}}",
         "moved_other": "{{n}} pairs moved to {{name}}",
         "unassigned_one": "{{n}} pair unassigned",
@@ -1338,6 +1369,56 @@
         "handOver": "Hand over",
         "putBack": "Put back in queue",
         "putBackTip": "Frees these pairs: the next adjudicator to open one takes it."
+      },
+      "pair": {
+        "history": "Answers on this pair",
+        "correctedBadge": "Corrected by an admin",
+        "saved": "Corrected. The new answer is being sent to BDRC.",
+        "final": "final",
+        "noHistory": "Nobody has answered this pair yet.",
+        "role": {
+          "annotator": "Annotator",
+          "adjudicator": "Adjudicator",
+          "admin_correction": "Admin correction"
+        },
+        "sync": {
+          "local": "Not sent (double review)",
+          "pending": "Sending…",
+          "running": "Sending…",
+          "succeeded": "Sent to BDRC",
+          "failed": "Failed to send",
+          "superseded": "Replaced before sending"
+        }
+      },
+      "pairs": {
+        "subtitle": "Every pair handed out so far, with its current final answer. Open a pair to see who answered what, and to correct its answer.",
+        "searchPlaceholder": "Search by pair number, batch or title",
+        "search": "Search",
+        "filters": "Filters",
+        "any": "Any",
+        "remove": "Remove",
+        "batch": "Batch",
+        "answer": "Answer",
+        "noAnswer": "Not answered yet",
+        "annotator": "Annotator",
+        "corrected": "Correction",
+        "correctedYes": "Corrected by an admin",
+        "correctedNo": "Not corrected",
+        "sort": "Sort",
+        "sorts": {
+          "newest": "Newest answers",
+          "oldest": "Oldest answers",
+          "id_desc": "Pair number (high to low)",
+          "id_asc": "Pair number (low to high)"
+        },
+        "clear": "Clear all",
+        "texts": "Texts (A / B)",
+        "answeredBy": "Answered by",
+        "when": "Answered",
+        "heldBy": "With {{names}}",
+        "empty": "No pairs match.",
+        "range": "{{from}}–{{to}} of {{total}} pairs",
+        "back": "All pairs"
       }
     }
   }

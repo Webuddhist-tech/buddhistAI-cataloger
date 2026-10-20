@@ -86,7 +86,7 @@ type Which = 'both' | 'a' | 'b';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  item: ReviewItem;
+  item: Pick<ReviewItem, 'subject' | 'issues' | 'verdict'>;
   start: CantAnswerStart;
   onSubmit: (fields: DecisionInput) => Promise<void>;
 }

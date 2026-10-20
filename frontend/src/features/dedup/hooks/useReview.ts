@@ -1,11 +1,14 @@
 import { useCallback, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   claimItems,
+  correctPair,
   fetchAdjudicationItem,
   fetchAdjudicationQueue,
   fetchAdminAdjudications,
   fetchAdminOverview,
+  fetchAdminPair,
+  fetchAdminPairs,
   fetchAnnotatorItems,
   fetchAnnotators,
   fetchBatches,
@@ -22,9 +25,12 @@ import {
   updateSettings,
   type AdjudicationInput,
   type AdjudicationItem,
+  type CorrectionInput,
   type DecisionInput,
   type DiffGranularity,
   type MyItemsState,
+  type PairFilters,
+  type PeriodRange,
   type ReviewItem,
   type ReviewMode,
 } from '../api/review';
@@ -48,11 +54,15 @@ const keys = {
   diff: (a: string, b: string, g: DiffGranularity) => [...reviewQueryKeyRoot, 'diff', a, b, g] as const,
   scanPages: (imageGroup: string) => [...reviewQueryKeyRoot, 'scan-pages', imageGroup] as const,
   adminRoot: [...reviewQueryKeyRoot, 'admin'] as const,
-  adminOverview: [...reviewQueryKeyRoot, 'admin', 'overview'] as const,
-  annotators: [...reviewQueryKeyRoot, 'admin', 'annotators'] as const,
-  annotatorItems: (userId: string, state: MyItemsState) =>
-    [...reviewQueryKeyRoot, 'admin', 'items', userId, state] as const,
+  adminOverview: (period: PeriodRange) =>
+    [...reviewQueryKeyRoot, 'admin', 'overview', period.since ?? '', period.until ?? ''] as const,
+  annotators: (period: PeriodRange) =>
+    [...reviewQueryKeyRoot, 'admin', 'annotators', period.since ?? '', period.until ?? ''] as const,
+  annotatorItems: (userId: string, state: MyItemsState, period: PeriodRange) =>
+    [...reviewQueryKeyRoot, 'admin', 'items', userId, state, period.since ?? '', period.until ?? ''] as const,
   adminAdjudications: (state: MyItemsState) => [...reviewQueryKeyRoot, 'admin', 'adjudications', state] as const,
+  adminPair: (itemId: number) => [...reviewQueryKeyRoot, 'admin', 'pair', itemId] as const,
+  adminPairs: (filters: PairFilters) => [...reviewQueryKeyRoot, 'admin', 'pairs', filters] as const,
   settings: [...reviewQueryKeyRoot, 'admin', 'settings'] as const,
 };
 
@@ -249,26 +259,26 @@ export function useTextDiff(a: string | undefined, b: string | undefined, granul
 
 // Admin
 
-export function useAdminOverview() {
+export function useAdminOverview(period: PeriodRange = {}) {
   return useQuery({
-    queryKey: keys.adminOverview,
-    queryFn: ({ signal }) => fetchAdminOverview({ signal }),
+    queryKey: keys.adminOverview(period),
+    queryFn: ({ signal }) => fetchAdminOverview(period, { signal }),
     staleTime: 0,
   });
 }
 
-export function useAnnotators() {
+export function useAnnotators(period: PeriodRange = {}) {
   return useQuery({
-    queryKey: keys.annotators,
-    queryFn: ({ signal }) => fetchAnnotators({ signal }),
+    queryKey: keys.annotators(period),
+    queryFn: ({ signal }) => fetchAnnotators(period, { signal }),
     staleTime: 0,
   });
 }
 
-export function useAnnotatorItems(userId: string | undefined, state: MyItemsState) {
+export function useAnnotatorItems(userId: string | undefined, state: MyItemsState, period: PeriodRange = {}) {
   return useQuery({
-    queryKey: keys.annotatorItems(userId ?? '', state),
-    queryFn: ({ signal }) => fetchAnnotatorItems(userId!, state, { signal }),
+    queryKey: keys.annotatorItems(userId ?? '', state, period),
+    queryFn: ({ signal }) => fetchAnnotatorItems(userId!, state, period, { signal }),
     enabled: Boolean(userId),
     staleTime: 0,
   });
@@ -324,5 +334,43 @@ export function useUpdateReviewMode() {
       queryClient.setQueryData(keys.settings, updated);
       queryClient.invalidateQueries({ queryKey: keys.adminRoot });
     },
+  });
+}
+
+/** A pair with its final answer and answer history, for the admin correction page. */
+export function useAdminPair(itemId: number | undefined) {
+  const valid = itemId != null && !Number.isNaN(itemId);
+  return useQuery({
+    queryKey: keys.adminPair(itemId ?? 0),
+    queryFn: ({ signal }) => fetchAdminPair(itemId!, { signal }),
+    enabled: valid,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function useCorrectPair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, fields }: { itemId: number; fields: CorrectionInput }) => correctPair(itemId, fields),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(keys.adminPair(updated.item_id), updated);
+      queryClient.invalidateQueries({ queryKey: keys.adminRoot });
+      // The annotator's and adjudicator's copies are now locked.
+      queryClient.invalidateQueries({ queryKey: keys.myItemsRoot });
+      queryClient.invalidateQueries({ queryKey: keys.item(updated.item_id) });
+      queryClient.invalidateQueries({ queryKey: keys.adjudicationRoot });
+    },
+  });
+}
+
+/** Every handed-out pair with its final answer, filtered and paged (admin pair list). */
+export function useAdminPairs(filters: PairFilters) {
+  return useQuery({
+    queryKey: keys.adminPairs(filters),
+    queryFn: ({ signal }) => fetchAdminPairs(filters, { signal }),
+    // Keeps the current page on screen while the next filter or page loads.
+    placeholderData: keepPreviousData,
+    staleTime: 0,
   });
 }

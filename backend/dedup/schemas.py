@@ -75,6 +75,13 @@ class AdjudicationIn(DecisionIn):
     note: Optional[str] = Field(default=None, max_length=2000)
 
 
+class CorrectionIn(DecisionIn):
+    """An admin's correction of a pair's final answer, with an optional reason. Fields
+    left out keep the current final answer's value (as for any decision)."""
+
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
 class AssignmentOut(BaseModel):
     slot: int = 1
     assigned_at: datetime
@@ -109,11 +116,19 @@ class ItemOut(BaseModel):
     decided_at: Optional[datetime] = None
     sync_state: Optional[str] = None
     assignment: Optional[AssignmentOut] = None
+    # When the assignee last changed their answer after first answering, and how many
+    # times (saving the same answer again is not a change). The first answer's time is
+    # assignment.completed_at.
+    answer_changed_at: Optional[datetime] = None
+    answer_changes: int = 0
     # "single" (answer is final) or "double" (two annotators, then an adjudicator if
     # they disagree).
     review_mode: str = "single"
-    # Both annotators have answered, so this answer can no longer change.
+    # Both annotators have answered, or an admin corrected the pair, so this answer can
+    # no longer change.
     locked: bool = False
+    # An admin corrected the pair's final answer (from the admin pair page).
+    corrected: bool = False
 
 
 class AnnotatorAnswerOut(BaseModel):
@@ -160,6 +175,64 @@ class PairOut(BaseModel):
     kind: str
     subject: dict[str, Any]
     evidence: dict[str, Any]
+
+
+class DecisionHistoryOut(BaseModel):
+    """One saved answer on a pair, as the admin pair page lists them."""
+
+    user_id: str
+    user_name: Optional[str] = None
+    # annotator | adjudicator | admin_correction
+    role: str
+    slot: Optional[int] = None
+    is_final: bool
+    verdict: Optional[str] = None
+    abstention_reason: Optional[str] = None
+    confidence: Optional[int] = None
+    issues: Optional[list[dict[str, Any]]] = None
+    partner_payload: Optional[dict[str, Any]] = None
+    note: Optional[str] = None
+    decided_at: datetime
+    sync_state: str
+
+
+class AdminPairOut(PairOut):
+    """A pair on the admin correction page: the evidence, its current final answer and
+    every answer ever saved on it. Never shown on the shared read-only page."""
+
+    review_mode: str = "single"
+    # False for a pair BDRC has but nobody has been handed yet: nothing to correct.
+    handed_out: bool = True
+    final: Optional[DecisionHistoryOut] = None
+    history: list[DecisionHistoryOut] = Field(default_factory=list)
+    corrected: bool = False
+
+
+class AdminPairRow(BaseModel):
+    """One pair in the admin pair list."""
+
+    item_id: int
+    batch_id: str
+    title_a: Optional[str] = None
+    title_b: Optional[str] = None
+    review_mode: str = "single"
+    # The current final answer; all None while the pair has none.
+    verdict: Optional[str] = None
+    abstention_reason: Optional[str] = None
+    answered_by: Optional[str] = None
+    answered_by_name: Optional[str] = None
+    # annotator | adjudicator | admin_correction
+    answered_role: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    sync_state: Optional[str] = None
+    corrected: bool = False
+    # Everyone assigned to the pair (one or two annotators).
+    annotator_names: list[str] = Field(default_factory=list)
+
+
+class AdminPairListOut(BaseModel):
+    total: int
+    rows: list[AdminPairRow]
 
 
 class BatchOut(BaseModel):
@@ -248,6 +321,9 @@ class AnnotatorOut(WorkCounts):
     agreed: int = 0
     # Pairs this person settled as adjudicator.
     adjudicated: int = 0
+    # Pairs whose answer this person changed after first answering (in the period, if one
+    # is chosen). Saving the same answer again is not a change.
+    changed: int = 0
     # Their own current answer per pair they annotated, counted by verdict
     # (same | different | contains | part_of | source_dup | not_sure).
     answers: dict[str, int] = Field(default_factory=dict)

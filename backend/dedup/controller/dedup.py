@@ -15,6 +15,7 @@ from dedup.deps import can_annotate, is_admin
 from dedup.models.dedup import (
     MODE_DOUBLE,
     ROLE_ADJUDICATOR,
+    ROLE_ADMIN_CORRECTION,
     ROLE_ANNOTATOR,
     SYNC_LOCAL,
     SYNC_PENDING,
@@ -41,6 +42,9 @@ def bdrc_error(exc: ReviewApiError) -> HTTPException:
     return HTTPException(status_code=502, detail=str(exc))
 
 
+CORRECTED_DETAIL = "An admin corrected this pair, so its answer can no longer be changed here"
+
+
 # --- views -------------------------------------------------------------------------
 
 def _item_view(
@@ -49,6 +53,8 @@ def _item_view(
     assignment: Optional[DedupAssignment],
     active_seconds: int = 0,
     locked: bool = False,
+    corrected: bool = False,
+    changes: Optional[list[datetime]] = None,
 ) -> ItemOut:
     return ItemOut(
         item_id=item.item_id,
@@ -77,7 +83,10 @@ def _item_view(
             else None
         ),
         review_mode=item.review_mode,
-        locked=locked,
+        locked=locked or corrected,
+        corrected=corrected,
+        answer_changed_at=changes[-1] if changes else None,
+        answer_changes=len(changes or []),
     )
 
 
@@ -92,8 +101,10 @@ def _views_for(db: Session, assignments: list[DedupAssignment]) -> list[ItemOut]
     items = repo.get_items(db, ids)
     decisions = repo.latest_decisions(db, ids)
     answered = repo.answered_counts(db, ids)
+    corrected = repo.corrected_item_ids(db, ids)
     owners = {a.user_id for a in assignments}
     time = repo.active_seconds(db, next(iter(owners))) if len(owners) == 1 else repo.active_seconds(db)
+    changes = repo.answer_changes(db, ids)
     return [
         _item_view(
             items[a.item_id],
@@ -101,6 +112,8 @@ def _views_for(db: Session, assignments: list[DedupAssignment]) -> list[ItemOut]
             a,
             time.get((a.item_id, a.user_id), 0),
             _is_locked(items[a.item_id], answered.get(a.item_id, 0)),
+            a.item_id in corrected,
+            changes.get((a.item_id, a.user_id)),
         )
         for a in assignments
         if a.item_id in items
@@ -158,7 +171,9 @@ def _claim_from_batch(db: Session, user: User, batch_id: str, need: int, mode: s
         rows = page.get("items") or []
         if not rows:
             break
-        taken = repo.assigned_item_ids(db, (r["item_id"] for r in rows))
+        ids = [r["item_id"] for r in rows]
+        # An admin's correction may not have reached BDRC yet.
+        taken = repo.assigned_item_ids(db, ids) | repo.corrected_item_ids(db, ids)
         for row in rows:
             if claimed >= need:
                 break
@@ -262,7 +277,8 @@ def get_item(db: Session, user: User, item_id: int) -> ItemOut:
     repo.mark_opened(db, assignment)
     db.commit()
     locked = _is_locked(item, repo.answered_counts(db, [item_id]).get(item_id, 0))
-    return _item_view(item, repo.latest_decision(db, item_id, user.id), assignment, locked=locked)
+    corrected = bool(repo.corrected_item_ids(db, [item_id]))
+    return _item_view(item, repo.latest_decision(db, item_id, user.id), assignment, locked=locked, corrected=corrected)
 
 
 def add_active_time(db: Session, user: User, item_id: int, seconds: int) -> None:
@@ -316,6 +332,8 @@ def save_decision(db: Session, user: User, item_id: int, body: DecisionIn) -> It
     item, assignment = _load_owned(db, user, item_id, lock=True)
     if assignment is None:
         raise HTTPException(status_code=403, detail="Only the assigned annotator can decide this item")
+    if repo.corrected_item_ids(db, [item_id]):
+        raise HTTPException(status_code=409, detail=CORRECTED_DETAIL)
 
     double = item.review_mode == MODE_DOUBLE
     if double:
@@ -380,9 +398,9 @@ def bdrc_payload(db: Session, decision: DedupDecision) -> dict[str, Any]:
     """The PUT body for BDRC. Every writable field is sent, so BDRC ends up holding
     exactly the final answer (e.g. an old abstention_reason is cleared).
 
-    On a double-review pair the final answer is the two annotators' shared verdict, or
-    the adjudicator's; ``partner_payload.review`` records how it was reached and every
-    answer behind it.
+    On a double-review pair the final answer is the two annotators' shared verdict, the
+    adjudicator's, or an admin's correction; ``partner_payload.review`` records how it
+    was reached and every answer behind it.
     """
     payload = {
         "status": decision.status,
@@ -400,7 +418,9 @@ def bdrc_payload(db: Session, decision: DedupDecision) -> dict[str, Any]:
 
     answers = repo.annotator_answers(db, decision.item_id)
     review: dict[str, Any] = {"annotations": [_answer_summary(d, s) for s, d in sorted(answers.items())]}
-    if decision.role == ROLE_ADJUDICATOR:
+    if decision.role == ROLE_ADMIN_CORRECTION:
+        review.update(resolution="admin_corrected", corrected_by=decision.user_id, note=decision.note)
+    elif decision.role == ROLE_ADJUDICATOR:
         adjudication = repo.get_adjudication(db, decision.item_id)
         review.update(
             resolution="adjudicated",

@@ -92,8 +92,14 @@ export interface ReviewItem {
   assignment: ItemAssignment | null;
   // 'single' (answer is final) or 'double' (two annotators, then an adjudicator if they disagree).
   review_mode: string;
-  // Both annotators have answered, so this answer can no longer change.
+  // Both annotators have answered, or an admin corrected the pair, so this answer can no longer change.
   locked: boolean;
+  // An admin corrected the pair's final answer.
+  corrected: boolean;
+  // When the assignee last changed their answer, and how many times (saving the same
+  // answer again is not a change). The first answer's time is assignment.completed_at.
+  answer_changed_at: string | null;
+  answer_changes: number;
 }
 
 // Adjudication: pairs whose two annotators disagreed (or either said "can't answer").
@@ -342,6 +348,8 @@ export interface Annotator extends WorkCounts {
   agreed: number;
   // Pairs this person settled as adjudicator.
   adjudicated: number;
+  // Pairs whose answer this person changed after first answering (in the period, if chosen).
+  changed: number;
   // Their own current answer per pair, counted by verdict (same, different, contains, …).
   answers: Record<string, number>;
 }
@@ -366,16 +374,36 @@ export interface ReassignResult {
   skipped: number[];
 }
 
-export function fetchAdminOverview(opts?: { signal?: AbortSignal }) {
-  return request<AdminOverview>('/admin/overview', { signal: opts?.signal });
+/** A period as ISO instants (`until` excluded); both unset means all time. */
+export interface PeriodRange {
+  since?: string;
+  until?: string;
 }
 
-export function fetchAnnotators(opts?: { signal?: AbortSignal }) {
-  return request<Annotator[]>('/admin/annotators', { signal: opts?.signal });
+function periodQuery(period: PeriodRange | undefined, params = new URLSearchParams()): string {
+  if (period?.since) params.set('since', period.since);
+  if (period?.until) params.set('until', period.until);
+  const s = params.toString();
+  return s ? `?${s}` : '';
 }
 
-export function fetchAnnotatorItems(userId: string, state: MyItemsState, opts?: { signal?: AbortSignal }) {
-  return request<ReviewItem[]>(`/admin/annotators/${encodeURIComponent(userId)}/items?state=${state}`, {
+export function fetchAdminOverview(period?: PeriodRange, opts?: { signal?: AbortSignal }) {
+  return request<AdminOverview>(`/admin/overview${periodQuery(period)}`, { signal: opts?.signal });
+}
+
+export function fetchAnnotators(period?: PeriodRange, opts?: { signal?: AbortSignal }) {
+  return request<Annotator[]>(`/admin/annotators${periodQuery(period)}`, { signal: opts?.signal });
+}
+
+/** With a period, only the pairs answered in it. */
+export function fetchAnnotatorItems(
+  userId: string,
+  state: MyItemsState,
+  period?: PeriodRange,
+  opts?: { signal?: AbortSignal },
+) {
+  const query = periodQuery(period, new URLSearchParams({ state }));
+  return request<ReviewItem[]>(`/admin/annotators/${encodeURIComponent(userId)}/items${query}`, {
     signal: opts?.signal,
   });
 }
@@ -420,4 +448,88 @@ export function reassignAdjudications(itemIds: number[], toUserId: string | null
     method: 'POST',
     body: JSON.stringify({ item_ids: itemIds, to_user_id: toUserId }),
   });
+}
+
+// Correcting a pair (admin pair page). The shared /dedup/pair/:id page never shows answers.
+
+export interface DecisionHistory {
+  user_id: string;
+  user_name: string | null;
+  // annotator | adjudicator | admin_correction
+  role: string;
+  slot: number | null;
+  is_final: boolean;
+  verdict: string | null;
+  abstention_reason: string | null;
+  confidence: number | null;
+  issues: ReviewIssue[] | null;
+  partner_payload: Record<string, unknown> | null;
+  note: string | null;
+  decided_at: string;
+  sync_state: string;
+}
+
+export interface AdminPair extends SharedPair {
+  review_mode: string;
+  // False for a pair BDRC has but nobody has been handed yet.
+  handed_out: boolean;
+  final: DecisionHistory | null;
+  // Every answer saved on the pair, oldest first.
+  history: DecisionHistory[];
+  corrected: boolean;
+}
+
+export interface CorrectionInput extends DecisionInput {
+  note?: string | null;
+}
+
+export function fetchAdminPair(itemId: number, opts?: { signal?: AbortSignal }) {
+  return request<AdminPair>(`/admin/pairs/${itemId}`, { signal: opts?.signal });
+}
+
+/** Makes the admin's answer the pair's final answer; pushed to BDRC in the background. */
+export function correctPair(itemId: number, body: CorrectionInput) {
+  return request<AdminPair>(`/admin/pairs/${itemId}/correction`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export interface AdminPairRow {
+  item_id: number;
+  batch_id: string;
+  title_a: string | null;
+  title_b: string | null;
+  review_mode: string;
+  // The current final answer; all null while the pair has none.
+  verdict: string | null;
+  abstention_reason: string | null;
+  answered_by: string | null;
+  answered_by_name: string | null;
+  answered_role: string | null;
+  decided_at: string | null;
+  sync_state: string | null;
+  corrected: boolean;
+  annotator_names: string[];
+}
+
+export type PairSort = 'newest' | 'oldest' | 'id_desc' | 'id_asc';
+
+export interface PairFilters {
+  batch_id?: string;
+  // An answer, or 'none' for pairs with no final answer yet.
+  verdict?: string;
+  annotator_id?: string;
+  corrected?: boolean;
+  // A pair number, or part of an MW id or a title.
+  q?: string;
+  sort?: PairSort;
+  offset?: number;
+  limit?: number;
+}
+
+export function fetchAdminPairs(filters: PairFilters, opts?: { signal?: AbortSignal }) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') q.set(k, String(v));
+  return request<{ total: number; rows: AdminPairRow[] }>(`/admin/pairs?${q}`, { signal: opts?.signal });
 }

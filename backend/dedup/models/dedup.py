@@ -32,12 +32,17 @@ SLOTS = (1, 2)
 
 ROLE_ANNOTATOR = "annotator"
 ROLE_ADJUDICATOR = "adjudicator"
+# An admin overriding the final answer from the admin pair page. Final over every other
+# answer, and the pair is locked for annotators and adjudicators from then on.
+ROLE_ADMIN_CORRECTION = "admin_correction"
 
 # How an adjudicated pair was settled.
 SIDED_WITH_1 = "sided_with_1"
 SIDED_WITH_2 = "sided_with_2"
 NEW_LABEL = "new_label"
 UNRESOLVED = "unresolved"
+# An admin corrected the pair before or after the adjudicator answered.
+ADMIN_CORRECTED = "admin_corrected"
 
 # Sync states for a decision.
 # An annotator's answer on a double-review pair: kept here, never sent to BDRC.
@@ -130,7 +135,7 @@ class DedupDecision(Base):
     role: Mapped[str] = mapped_column(String, nullable=False, default=ROLE_ANNOTATOR, server_default=ROLE_ANNOTATOR)
     # The answer BDRC gets. False for an annotator's answer on a double-review pair.
     is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    # Adjudicator's optional note on why they decided as they did.
+    # Adjudicator's or correcting admin's optional note on why they decided as they did.
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # The fields sent to BDRC with PUT /review/items/{item_id}.
