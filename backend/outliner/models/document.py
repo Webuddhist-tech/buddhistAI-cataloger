@@ -47,3 +47,10 @@ class OutlinerDocument(Base):
     # False when the scan is missing pages at the beginning and/or the end.
     is_complete: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     reviewer_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    # Group and BDRC batch the volume was assigned from. None on documents from before
+    # groups: those are reviewed by any reviewer until scripts/backfill_document_groups.py
+    # tags them.
+    group_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("outliner_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    batch_id: Mapped[str | None] = mapped_column(String, nullable=True)

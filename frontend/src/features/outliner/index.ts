@@ -10,6 +10,7 @@ export {
   AdminDocument,
   AdminSegment,
   AdminUsers,
+  AdminGroups,
   AdminReviewerStats,
   AdminBDRCWorks,
   AdminBDRCPersons,

@@ -29,6 +29,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Switch } from '@/components/ui/switch';
 import SelfRviewedToggle from './SelfRviewedToggle';
 import HideTestRejectedToggle, { isHideTestRejected } from './HideTestRejectedToggle';
+import { GroupFilter } from './GroupFilter';
 import { PlusIcon } from 'lucide-react';
 
 
@@ -47,6 +48,7 @@ function DocumentsTab({
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get('status') || undefined;
   const annotator = searchParams.get('annotator') || undefined;
+  const group = searchParams.get('group') || undefined;
   const reviewer = searchParams.get('reviewer') || undefined;
   const debouncedTitle=searchParams.get('title') || undefined
   const includeApproved = searchParams.get('include_approved') === 'true';
@@ -56,6 +58,7 @@ function DocumentsTab({
 
   const [draftStatus, setDraftStatus] = useState(status ?? 'all');
   const [draftAnnotator, setDraftAnnotator] = useState(annotator ?? 'all');
+  const [draftGroup, setDraftGroup] = useState(group ?? 'all');
   const [draftMyReviews, setDraftMyReviews] = useState(
     !!currentUser?.id && reviewer === currentUser.id
   );
@@ -75,8 +78,9 @@ function DocumentsTab({
       includeSkipped,
       excludeOwnAssignedDocuments: true,
       hideTestRejected,
+      groupId: group,
     }),
-    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped, hideTestRejected]
+    [status, annotator, reviewer, debouncedTitle, page, includeApproved, includeSkipped, hideTestRejected, group]
   );
 
   
@@ -91,6 +95,8 @@ function DocumentsTab({
       else params.set('status', draftStatus);
       if (draftAnnotator === 'all') params.delete('annotator');
       else params.set('annotator', draftAnnotator);
+      if (draftGroup === 'all') params.delete('group');
+      else params.set('group', draftGroup);
       const trimmedTitle = draftTitle.trim();
       if (trimmedTitle) params.set('title', trimmedTitle);
       else params.delete('title');
@@ -106,6 +112,7 @@ function DocumentsTab({
   const isApplyDisabled =
     draftStatus === (status ?? 'all') &&
     draftAnnotator === (annotator ?? 'all') &&
+    draftGroup === (group ?? 'all') &&
     draftTitle.trim() === (debouncedTitle ?? '').trim() &&
     draftIncludeApproved === includeApproved &&
     draftIncludeSkipped === includeSkipped;
@@ -157,6 +164,11 @@ function DocumentsTab({
             <UserFilter value={draftAnnotator} onChange={setDraftAnnotator} />
             
           </div>
+          {currentUser?.role === 'admin' && (
+            <div className="flex items-center gap-2">
+              <GroupFilter value={draftGroup} onChange={setDraftGroup} />
+            </div>
+          )}
 
           <div className="relative w-full min-w-[200px] max-w-xs sm:w-64">
             <TitleFilter value={draftTitle} onChange={setDraftTitle} />

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from bdrc.volume import update_volume_status
 from core.redis import invalidate_document_content_cache, set_document_content_in_cache
+from outliner.controller.group import review_group_ids
 from outliner.models.outliner import OutlinerDocument
 from outliner.repository import outliner_repository as outliner_repo
 from outliner.utils.outliner_utils import (
@@ -29,10 +30,14 @@ def create_document(
     db: Session,
     content: str,
     filename: Optional[str] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
 ) -> OutlinerDocument:
     """Create a new outliner document with full text content"""
-    db_document = outliner_repo.insert_document(db, content, filename, user_id)
+    db_document = outliner_repo.insert_document(
+        db, content, filename, user_id, group_id=group_id, batch_id=batch_id
+    )
     set_document_content_in_cache(db_document.id, db_document.content)
     return db_document
 
@@ -74,6 +79,7 @@ def list_documents(
     title: Optional[str] = None,
     exclude_document_user_id: Optional[str] = None,
     hide_test_rejected: bool = False,
+    group_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     List all outliner documents, optionally filtered by user, status, and deletion status.
@@ -88,6 +94,7 @@ def list_documents(
         title: If set, case-insensitive substring match on document filename (list UI title).
         exclude_document_user_id: If set, omit documents whose owner/assignee user_id equals this value.
         hide_test_rejected: TEMP. If True, omit Tsenlek (mmBERT test) documents that are fully reviewed and have a rejected segment.
+        group_id: If set, only documents assigned from this group.
     """
     return outliner_repo.list_documents(
         db,
@@ -102,6 +109,7 @@ def list_documents(
         title=title,
         exclude_document_user_id=exclude_document_user_id,
         hide_test_rejected=hide_test_rejected,
+        group_id=group_id,
     )
 
 
@@ -411,10 +419,11 @@ def update_document_assignee(
 
 def assign_reviewr(
     db: Session,
-    reviewer_id: str,
+    reviewer: User,
 ) -> Dict[str, str]:
+    reviewer_id = reviewer.id
     document = outliner_repo.fetch_random_completed_unassigned_document(
-        db, exclude_user_id=reviewer_id
+        db, exclude_user_id=reviewer_id, group_ids=review_group_ids(db, reviewer)
     )
     if not document:
         raise HTTPException(
@@ -433,12 +442,20 @@ def assign_reviewr(
 def assign_document_reviewer(
     db: Session,
     document_id: str,
-    reviewer_id: str,
+    reviewer: User,
 ) -> Dict[str, str]:
     """Assign the current user as reviewer on a specific document (if unassigned)."""
+    reviewer_id = reviewer.id
     document = outliner_repo.fetch_document_by_id(db, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    group_ids = review_group_ids(db, reviewer)
+    if group_ids is not None and document.group_id is not None and document.group_id not in group_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="This document belongs to a group you are not in",
+        )
 
     if document.user_id and document.user_id == reviewer_id:
         raise HTTPException(

@@ -7,10 +7,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from outliner.controller.active_batch import (
-    get_active_batch as get_active_batch_ctrl,
-    update_active_batch as update_active_batch_ctrl,
-)
 from outliner.controller.outliner import (
     get_annotator_weekly_quality as get_annotator_weekly_quality_ctrl,
     get_dashboard_stats as get_dashboard_stats_ctrl,
@@ -25,8 +21,6 @@ from outliner.repository.statistics import (
 )
 
 from .schemas import (
-    ActiveBatchResponse,
-    ActiveBatchUpdate,
     AnnotatedPendingReviewDocumentsResponse,
     AnnotatorApprovedRow,
     AnnotatorWeeklyQualityResponse,
@@ -163,14 +157,3 @@ def get_statistics(
         reviewed_by_user=[ReviewerApprovedRow(**r) for r in reviewed_by_user_rows],
     )
 
-
-@router.get("/dashboard/active-batch", response_model=ActiveBatchResponse)
-def get_active_batch(db: Session = Depends(get_db)):
-    """Return the admin-selected active BEC volume batch id, if any."""
-    return get_active_batch_ctrl(db)
-
-
-@router.put("/dashboard/active-batch", response_model=ActiveBatchResponse)
-def put_active_batch(body: ActiveBatchUpdate, db: Session = Depends(get_db)):
-    """Set or clear the active BEC volume batch id."""
-    return update_active_batch_ctrl(db, body.batch_id)

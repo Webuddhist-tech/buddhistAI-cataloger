@@ -13,9 +13,10 @@ from settings.models.membership import TenantMembership
 from settings.models.role import Role
 from settings.models.permission import Permission
 from outliner.models.outliner import (
-    ActiveBatch,
     BdrcSyncJob,
     OutlinerDocument,
+    OutlinerGroup,
+    OutlinerGroupMember,
     OutlinerSegment,
     SegmentRejection,
     SegmentReview,

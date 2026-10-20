@@ -109,6 +109,7 @@ def list_documents(
         False,
         description="TEMP: hide Tsenlek (mmBERT test) documents that are fully reviewed and have a rejected segment",
     ),
+    group_id: Optional[str] = Query(None, description="Only documents assigned from this group"),
     db: Session = Depends(get_db),
 ):
 
@@ -124,6 +125,7 @@ def list_documents(
         include_skipped=include_skipped,
         title=title,
         hide_test_rejected=hide_test_rejected,
+        group_id=group_id,
     )
     return result
 
@@ -570,7 +572,7 @@ def assign_reviewr(
     """Assign one random completed unassigned document to the clicking reviewer/admin user."""
     return assign_reviewr_ctrl(
         db=db,
-        reviewer_id=current_user.id,
+        reviewer=current_user,
     )
 
 
@@ -589,5 +591,5 @@ def assign_document_reviewer(
     return assign_document_reviewer_ctrl(
         db=db,
         document_id=document_id,
-        reviewer_id=current_user.id,
+        reviewer=current_user,
     )

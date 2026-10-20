@@ -73,6 +73,12 @@ def require_outliner_access(
         db.close()
 
 
+def require_outliner_admin(user: User = Depends(require_outliner_access)) -> User:
+    if (user.role or "").strip().lower() != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    return user
+
+
 
 def is_user_admin_or_reviewer(user: User) -> bool:
     """Only reviewer/admin attribution updates reviewed_by_id on segments."""

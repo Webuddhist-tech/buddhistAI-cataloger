@@ -40,8 +40,11 @@ def list_documents(
     title: Optional[str] = None,
     exclude_document_user_id: Optional[str] = None,
     hide_test_rejected: bool = False,
+    group_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     query = db.query(OutlinerDocument)
+    if group_id:
+        query = query.filter(OutlinerDocument.group_id == group_id)
     if user_id:
         query = query.filter(OutlinerDocument.user_id == user_id)
     if reviewer_id:
@@ -193,6 +196,8 @@ def insert_document(
     content: str,
     filename: Optional[str] = None,
     user_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    batch_id: Optional[str] = None,
 ) -> OutlinerDocument:
     db_document = OutlinerDocument(
         id=str(uuid.uuid4()),
@@ -200,6 +205,8 @@ def insert_document(
         filename=filename,
         user_id=user_id,
         status="active",
+        group_id=group_id,
+        batch_id=batch_id,
     )
     db.add(db_document)
     db.commit()
@@ -308,11 +315,17 @@ def _random_completed_unassigned_document(
     *,
     user_ids: Optional[List[str]] = None,
     exclude_user_id: Optional[str] = None,
+    group_ids: Optional[List[str]] = None,
 ) -> Optional[OutlinerDocument]:
     query = db.query(OutlinerDocument).filter(
         OutlinerDocument.status == "completed",
         OutlinerDocument.reviewer_id.is_(None),
     )
+    if group_ids is not None:
+        # Documents from before groups (no group) can still be reviewed by anyone.
+        query = query.filter(
+            or_(OutlinerDocument.group_id.in_(group_ids), OutlinerDocument.group_id.is_(None))
+        )
     if user_ids is not None:
         query = query.filter(OutlinerDocument.user_id.in_(user_ids))
     if exclude_user_id is not None:
@@ -324,6 +337,7 @@ def _random_completed_unassigned_document(
 def fetch_random_completed_unassigned_document(
     db: Session,
     exclude_user_id: Optional[str] = None,
+    group_ids: Optional[List[str]] = None,
 ) -> Optional[OutlinerDocument]:
     """Pick a completed, unassigned document for reviewer self-assign.
 
@@ -332,8 +346,12 @@ def fetch_random_completed_unassigned_document(
 
     Documents annotated by ``exclude_user_id`` (the requesting reviewer) are
     never returned, so a reviewer cannot be assigned their own work.
+
+    With ``group_ids``, only documents of those groups (or with no group) are picked.
     """
-    return _random_completed_unassigned_document(db, exclude_user_id=exclude_user_id)
+    return _random_completed_unassigned_document(
+        db, exclude_user_id=exclude_user_id, group_ids=group_ids
+    )
 
 
 # Spot checks favour recent work, so new reviewers' documents come up instead of being
