@@ -143,11 +143,14 @@ export function GroupMembersDialog({
     return byUser;
   }, [groups, group?.id]);
 
+  // Reset only when opening or switching group: a refreshed `group` after saving
+  // must not clear the search and flash the full list while the dialog closes.
   useEffect(() => {
     if (!open || !group) return;
     setSelected(new Set(group.members.map((m) => m.user_id)));
     setSearch('');
-  }, [open, group]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, group?.id]);
 
   const visibleUsers = useMemo(() => {
     const q = search.trim().toLowerCase();

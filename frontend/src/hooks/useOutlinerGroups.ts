@@ -7,6 +7,7 @@ import {
   listGroups,
   setGroupMembers,
   updateGroup,
+  type OutlinerGroup,
 } from '@/api/outliner';
 
 const GROUPS_KEY = ['outliner', 'groups'] as const;
@@ -16,19 +17,34 @@ const MY_GROUPS_KEY = ['outliner', 'groups', 'mine'] as const;
 export function useOutlinerGroups({ enabled = true }: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: GROUPS_KEY, queryFn: listGroups, enabled, staleTime: 60_000 });
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: GROUPS_KEY });
+  // Refetch in the background (not awaited) so dialogs close as soon as the save returns.
+  // `exact` keeps the BDRC-backed batches query (same key prefix, ~1s) out of it.
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: GROUPS_KEY, exact: true });
+    void queryClient.invalidateQueries({ queryKey: MY_GROUPS_KEY });
+  };
+  const putGroup = (group: OutlinerGroup) => {
+    queryClient.setQueryData<OutlinerGroup[]>(GROUPS_KEY, (old) => old?.map((g) => (g.id === group.id ? group : g)));
+    refresh();
+  };
 
-  const create = useMutation({ mutationFn: createGroup, onSuccess: invalidate });
+  const create = useMutation({ mutationFn: createGroup, onSuccess: refresh });
   const update = useMutation({
     mutationFn: ({ groupId, ...body }: { groupId: string; name?: string; batch_id?: string | null }) =>
       updateGroup(groupId, body),
-    onSuccess: invalidate,
+    onSuccess: putGroup,
   });
   const setMembers = useMutation({
     mutationFn: ({ groupId, userIds }: { groupId: string; userIds: string[] }) => setGroupMembers(groupId, userIds),
-    onSuccess: invalidate,
+    onSuccess: putGroup,
   });
-  const remove = useMutation({ mutationFn: deleteGroup, onSuccess: invalidate });
+  const remove = useMutation({
+    mutationFn: deleteGroup,
+    onSuccess: (_, groupId) => {
+      queryClient.setQueryData<OutlinerGroup[]>(GROUPS_KEY, (old) => old?.filter((g) => g.id !== groupId));
+      refresh();
+    },
+  });
 
   return {
     ...query,
