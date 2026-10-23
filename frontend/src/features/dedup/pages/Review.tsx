@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import type { AdjudicationItem, AdminPair, DecisionInput, ReviewItem } from '../api/review';
+import type { AdjudicationItem, AdminPair, DecisionInput, MyItemsState, ReviewItem } from '../api/review';
 import AnswerHistory from '../components/AnswerHistory';
 import AnnotatorAnswers from '../components/AnnotatorAnswers';
 import CantAnswerDialog, { type CantAnswerStart } from '../components/CantAnswerDialog';
@@ -75,7 +75,9 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   const adjudicate = mode === 'adjudicate';
   const correct = mode === 'correct';
   // From the admin pair list: its filters (to go back to) and the pairs on its page.
-  const fromList = useLocation().state as { from?: string; ids?: number[] } | null;
+  // From the annotator's list: the tab it was opened from.
+  const fromList = useLocation().state as { from?: string; ids?: number[]; tab?: MyItemsState } | null;
+  const tab = fromList?.tab;
   const { itemId: itemIdParam } = useParams();
   const itemId = Number(itemIdParam);
   const navigate = useNavigate();
@@ -91,9 +93,14 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
       ? adjudicationItem
       : annotatorItem;
   const myList = useMyItems('all', undefined, mode === 'annotate');
+  // Previous / next stay in the tab the pair was opened from (a link or a refresh has none:
+  // the whole list). A pair not in that tab, e.g. one just answered from "To do" with no
+  // more left, falls back to the whole list too.
+  const myTabList = useMyItems(tab ?? 'all', undefined, mode === 'annotate' && tab != null);
+  const inTab = Boolean(tab && myTabList.data?.some((i) => i.item_id === itemId));
   const adjudicationList = useAdjudicationQueue('all', adjudicate);
   const adminList = useMemo(() => ({ data: (fromList?.ids ?? []).map((id) => ({ item_id: id }) as ReviewItem) }), [fromList?.ids]);
-  const list: { data?: ReviewItem[] } = correct ? adminList : adjudicate ? adjudicationList : myList;
+  const list: { data?: ReviewItem[] } = correct ? adminList : adjudicate ? adjudicationList : inTab ? myTabList : myList;
   const loaded = useMemo(() => list.data ?? [], [list.data]);
   const total = loaded.length;
   const index = loaded.findIndex((i) => i.item_id === itemId);
@@ -104,9 +111,10 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
     (id: number | null) => {
       if (id == null) return;
       if (correct) navigate(`/dedup-admin/pairs/${id}`, { state: fromList });
-      else navigate(adjudicate ? `/dedup/adjudicate/${id}` : `/dedup/item/${id}`);
+      else if (adjudicate) navigate(`/dedup/adjudicate/${id}`);
+      else navigate(`/dedup/item/${id}`, { state: tab ? { tab } : null });
     },
-    [navigate, adjudicate, correct, fromList],
+    [navigate, adjudicate, correct, fromList, tab],
   );
 
   const item = itemQuery.data as ReviewItem | AdjudicationItem | undefined;
@@ -253,7 +261,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
   // show the read-only page instead of a work page they cannot use.
   const notMine = itemQuery.error != null || (item != null && !itemQuery.isPlaceholderData && item.assignment == null);
   if (mode === 'annotate' && notMine) {
-    return <Navigate to={`/dedup/pair/${itemIdParam}`} replace />;
+    return <Navigate to={`/dedup/pair/${itemIdParam}`} replace state={{ notMine: true }} />;
   }
 
   if (itemQuery.isLoading) {
@@ -288,7 +296,7 @@ export default function Review({ mode = 'annotate' }: Readonly<{ mode?: ReviewMo
     <div className={`w-full ${scan ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6`} style={{ paddingBottom: barHeight + 24 }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          to={correct ? `/dedup-admin/pairs${fromList?.from ?? ''}` : adjudicate ? '/dedup/adjudicate' : '/dedup'}
+          to={correct ? `/dedup-admin/pairs${fromList?.from ?? ''}` : adjudicate ? '/dedup/adjudicate' : tab === 'done' ? '/dedup?tab=done' : '/dedup'}
           className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="h-4 w-4" />{' '}

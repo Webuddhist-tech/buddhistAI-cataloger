@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Eye, Flag, Gavel, Lock, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@/hooks/useUser';
@@ -10,10 +10,9 @@ import type { MyItemsState, ReviewItem } from '../api/review';
 import { useAdjudicationQueue, useBatchName, useClaimItems, useMyItems } from '../hooks/useReview';
 import { dedupRole, formatNumber, hasIssue, isDecided, isDedupAdmin, verdictLabel } from '../utils';
 
-// "To do" only, like the outliner list: answered pairs drop out once submitted, so the
-// list shows just the work left. Annotators asked not to see finished work here; add
-// 'done' / 'all' back to bring the tabs back.
-const STATE_TABS: MyItemsState[] = ['open' /* , 'done', 'all' */];
+// "To do" opens first, so annotators see only the work left; "Done" is where they find a
+// pair they answered to check or change it. No "All": it mixed the two and confused people.
+const STATE_TABS: MyItemsState[] = ['open', 'done'];
 
 const VERDICT_STYLE: Record<string, string> = {
   same: 'bg-green-50 text-green-700',
@@ -40,7 +39,10 @@ export default function Queue() {
   const navigate = useNavigate();
   const batchName = useBatchName();
   const { user } = useUser();
-  const [state, setState] = useState<MyItemsState>('open');
+  // The tab lives in the URL (?tab=done), so "back" from a pair returns to the same tab.
+  const [params, setParams] = useSearchParams();
+  const state: MyItemsState = params.get('tab') === 'done' ? 'done' : 'open';
+  const setState = (key: MyItemsState) => setParams(key === 'open' ? {} : { tab: key }, { replace: true });
   const [q, setQ] = useState('');
   // Reviewers are the Deduplicator's adjudicators: they have no annotation work.
   const isReviewer = dedupRole(user) === 'reviewer';
@@ -61,15 +63,20 @@ export default function Queue() {
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return loaded;
+    // A number finds the pair by its number in this list or by the id in a shared link.
+    const number = needle.replace(/^#/, '');
+    const isNumber = /^\d+$/.test(number);
     return loaded.filter(
       (it) =>
+        (isNumber && (String(it.item_id) === number || String(numberOf.get(it.item_id)) === number)) ||
         (it.evidence.a?.title_bo ?? '').toLowerCase().includes(needle) ||
         (it.evidence.b?.title_bo ?? '').toLowerCase().includes(needle),
     );
-  }, [loaded, q]);
+  }, [loaded, q, numberOf]);
 
   const myOpen = openItems.data?.length ?? 0;
-  const openItem = (itemId: number) => navigate(`/dedup/item/${itemId}`);
+  // The pair page's previous / next walk this tab's list.
+  const openItem = (itemId: number) => navigate(`/dedup/item/${itemId}`, { state: { tab: state } });
 
   const assignWork = async () => {
     try {
@@ -84,7 +91,7 @@ export default function Queue() {
   if (isReviewer) return <Navigate to="/dedup/adjudicate" replace />;
 
   let emptyText = t('dedup.queue.empty');
-  if (q) emptyText = t('dedup.common.noTitleMatch', { q });
+  if (q) emptyText = t('dedup.common.noMatch', { q });
   else if (state !== 'done') emptyText = t('dedup.queue.emptyToDo', { button: t('dedup.queue.assignWork') });
 
   return (
@@ -151,7 +158,7 @@ export default function Queue() {
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={t('dedup.common.searchTitles')}
+          placeholder={t('dedup.common.searchTitlesOrNumber')}
           className="w-full sm:w-72"
         />
       </div>

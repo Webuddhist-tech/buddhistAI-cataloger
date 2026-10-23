@@ -877,6 +877,8 @@
       "close": "Close",
       "noTitleMatch": "No titles match “{{q}}”.",
       "searchTitles": "Search titles…",
+      "searchTitlesOrNumber": "Search titles or pair number…",
+      "noMatch": "Nothing matches “{{q}}”.",
       "itemId": "Item {{id}}",
       "view": "View",
       "texts": "Texts",
