@@ -47,10 +47,13 @@ class OutlinerSegment(Base):
     reviewer_author: Mapped[str | None] = mapped_column(String, nullable=True)
     title_bdrc_id: Mapped[str | None] = mapped_column(String, nullable=True)
     author_bdrc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Indexed: deleting a segment looks up its children here (FK SET NULL + child_segments);
+    # without it every delete, merge and split read the whole table.
     parent_segment_id: Mapped[str | None] = mapped_column(
         String,
         ForeignKey("outliner_segments.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     status: Mapped[str | None] = mapped_column(String, nullable=True)
     reviewed_by_id: Mapped[str | None] = mapped_column(
@@ -92,6 +95,8 @@ class OutlinerSegment(Base):
     __table_args__ = (
         Index("ix_outliner_segments_document_index", "document_id", "segment_index"),
         Index("ix_outliner_segments_span", "document_id", "span_start", "span_end"),
+        # Document lists and dashboard counts filter segments by document and status.
+        Index("ix_outliner_segments_document_status", "document_id", "status"),
     )
 
     rejections: Mapped[list["SegmentRejection"]] = relationship(
