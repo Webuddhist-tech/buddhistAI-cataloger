@@ -25,6 +25,15 @@ import {
   type OutlineSegmentStatus,
   type SegmentRejection,
 } from '@/api/outliner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { SEGMENT_LABEL_VALUES } from '@/components/outliner/segment-label';
+import type { SegmentLabel } from '@/components/outliner/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Check, FileText, History, Loader2, Merge, Scissors, Undo, User, X } from 'lucide-react';
@@ -391,6 +400,17 @@ function SegmentRow({
     },
     onError: (error: Error) => {
       toast.error(`Failed to update: ${error.message}`);
+    },
+  });
+
+  const { mutate: patchLabel, isPending: labelSaving } = useMutation({
+    mutationFn: (label: SegmentLabel) => updateSegment(segment.id, { label }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['outliner-admin-document', documentId] });
+      toast.success('Label updated');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update label: ${error.message}`);
     },
   });
 
@@ -845,12 +865,38 @@ function SegmentRow({
         
             <div className="flex flex-wrap justify-between items-center gap-2">
              {(segment.label ||
+               canEditReview ||
                Boolean(sanityFindings?.length) ||
                segment.created_by_id ||
                segment.corrected_by_reviewer) && (
              <div className="inline-flex  items-center gap-1 mt-2 mb-1">
                <ReviewerChangeBadges segment={segment} />
-               {segment.label && (
+               {canEditReview ? (
+                 <div onClick={(e) => e.stopPropagation()}>
+                   <Select
+                     value={segment.label ?? undefined}
+                     onValueChange={(value) => patchLabel(value as SegmentLabel)}
+                     disabled={labelSaving}
+                   >
+                     <SelectTrigger
+                       className={
+                         "h-7 text-sm font-semibold rounded-full border-0 " +
+                         (segment.label ? getLabelColor(segment.label) : '')
+                       }
+                       aria-label="Segment label"
+                     >
+                       <SelectValue placeholder="Set label" />
+                     </SelectTrigger>
+                     <SelectContent>
+                       {SEGMENT_LABEL_VALUES.filter((v): v is SegmentLabel => v !== 'none').map((opt) => (
+                         <SelectItem key={opt} value={opt}>
+                           {opt}
+                         </SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+               ) : segment.label && (
                  <span
                    className={
                      "px-2 text-sm font-semibold py-0.5 rounded-full  " +
