@@ -22,6 +22,7 @@ from outliner.models.outliner import (
     SegmentReview,
 )
 from dedup.models import DedupActiveTime, DedupAdjudication, DedupAssignment, DedupDecision, DedupItem, DedupSetting
+from outline_fix.models import OutlineFixEdit, OutlineFixWork
 
 import os
 load_dotenv()

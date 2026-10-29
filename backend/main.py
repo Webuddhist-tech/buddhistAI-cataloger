@@ -11,6 +11,7 @@ from cataloger.routers import ai, person, text, translation, annotation, bdrc, c
 from outliner.routers import router as outliner_router
 from outliner.routers.image_proxy import router as outliner_image_proxy_router
 from dedup.routers import router as dedup_router
+from outline_fix.routers import router as outline_fix_router
 from settings.routers import (
     tenant_router,
     role_router,
@@ -110,6 +111,7 @@ app.include_router(ai.router, prefix="/ai", tags=["ai"])
 app.include_router(outliner_router, prefix="/outliner", tags=["outliner"])
 app.include_router(outliner_image_proxy_router, prefix="/outliner", tags=["outliner"])
 app.include_router(dedup_router, prefix="/dedup", tags=["dedup"])
+app.include_router(outline_fix_router, prefix="/outline-fix", tags=["outline-fix"])
 
 
 # Settings routes

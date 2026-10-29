@@ -8,7 +8,7 @@ interface UserRowProps {
 }
 
 const USER_ROLES = ['user', 'annotator', 'reviewer', 'admin'];
-const PERMISSIONS = ['outliner', 'cataloger', 'dedup'];
+const PERMISSIONS = ['outliner', 'cataloger', 'dedup', 'outline_fix'];
 
 function UserRow({ user, onUpdate, onDelete }: UserRowProps) {
   const handleRoleChange = (newRole: string) => {

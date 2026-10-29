@@ -15,6 +15,7 @@ class Permissions(Enum):
     Outliner = "outliner"
     Cataloger = "cataloger"
     Dedup = "dedup"
+    OutlineFix = "outline_fix"
 
 class User(Base):
     __tablename__ = "users"
@@ -29,6 +30,9 @@ class User(Base):
     # Role in the Deduplicator, set apart from `role` (the Outliner's): "annotator",
     # "reviewer" (shown as Adjudicator) or "admin". NULL = annotator.
     dedup_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Role in the Outline Fixer, apart from the other two: "annotator" or "admin".
+    # NULL = annotator. Set from the Outline Fixer's own Users page.
+    outline_fix_role: Mapped[str | None] = mapped_column(String, nullable=True)
     memberships = relationship("TenantMembership", back_populates="user")
 
 

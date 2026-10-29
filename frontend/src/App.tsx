@@ -40,6 +40,11 @@ const DedupAdminAnnotatorLazy = lazy(() => import('@/features/dedup').then((m) =
 const DedupAdminAdjudicationsLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminAdjudications })));
 const DedupAdminUsersLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminUsers })));
 const DedupAdminPairListLazy = lazy(() => import('@/features/dedup').then((m) => ({ default: m.AdminPairList })));
+const OutlineFixQueueLazy = lazy(() => import('@/features/outline-fix').then((m) => ({ default: m.Queue })));
+const OutlineFixWorkspaceLazy = lazy(() => import('@/features/outline-fix').then((m) => ({ default: m.Workspace })));
+const OutlineFixAdminLazy = lazy(() => import('@/features/outline-fix').then((m) => ({ default: m.Admin })));
+const OutlineFixAdminLayoutLazy = lazy(() => import('@/features/outline-fix').then((m) => ({ default: m.AdminLayout })));
+const OutlineFixAdminUsersLazy = lazy(() => import('@/features/outline-fix').then((m) => ({ default: m.AdminUsers })));
 const OutlinerWorkspaceLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.Workspace })));
 const OutlinerMyStatsLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.MyStats })));
 const OutlinerAdminDashboardLazy = lazy(() => import('@/features/outliner').then((m) => ({ default: m.AdminDashboard })));
@@ -188,6 +193,30 @@ function App() {
           <Route path="/dedup/adjudicate/:itemId" element={
             <ProtectedRoute>
               <DedupReviewLazy mode="adjudicate" />
+            </ProtectedRoute>
+          } />
+          <Route path="/outline-fix" element={
+            <ProtectedRoute>
+              <OutlineFixQueueLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/outline-fix/work/:workId" element={
+            <ProtectedRoute>
+              <OutlineFixWorkspaceLazy />
+            </ProtectedRoute>
+          } />
+          <Route path="/outline-fix-admin" element={
+            <ProtectedRoute>
+              <OutlineFixAdminLayoutLazy>
+                <OutlineFixAdminLazy />
+              </OutlineFixAdminLayoutLazy>
+            </ProtectedRoute>
+          } />
+          <Route path="/outline-fix-admin/users" element={
+            <ProtectedRoute>
+              <OutlineFixAdminLayoutLazy>
+                <OutlineFixAdminUsersLazy />
+              </OutlineFixAdminLayoutLazy>
             </ProtectedRoute>
           } />
           <Route path="/dedup-admin" element={<Navigate to="/dedup-admin/overview" replace />} />
