@@ -9,11 +9,14 @@ import {
   Plus,
   Library,
   CopyCheck,
+  ListChecks,
   Users,
   Code2,
 } from "lucide-react"
 import { usePermission } from "@/hooks/usePermission"
 import PermissionButton from "@/components/PermissionButton"
+import { useUser } from "@/hooks/useUser"
+import { hasOutlineFixAccess } from "@/features/outline-fix/utils"
 
 const Index = () => {
   const navigate = useNavigate()
@@ -21,6 +24,7 @@ const Index = () => {
   const [, setEditedContent] = useLocalStorage("editedContent", "")
   const { data: permission, isFetching: isFetchingPermission } = usePermission()
   const isAdmin = permission?.role === "admin"
+  const { user } = useUser()
 
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col gap-12">
@@ -130,6 +134,26 @@ const Index = () => {
             </div>
           </div>
           </Link>
+          {/* Shown to Outline Fixer users only, as its nav tab is. */}
+          {hasOutlineFixAccess(user) && (
+          <Link
+              to="/outline-fix"
+            >
+          <div className="flex h-full items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200  hover:shadow-md">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border ">
+              <ListChecks className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t("home.featureOutlineFixerTitle")}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600">
+                {t("home.featureOutlineFixerDescription")}
+              </p>
+            </div>
+          </div>
+          </Link>
+          )}
         </div>
       </section>
 
