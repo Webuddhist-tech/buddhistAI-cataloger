@@ -20,6 +20,10 @@ export function useUserActions() {
         // Invalidate users queries to refetch updated data
         queryClient.invalidateQueries({ queryKey: ['users'] });
         queryClient.invalidateQueries({ queryKey: ['user', userId] });
+        // Your own record (nav, tool access) is cached as ['user', 'me']; editing yourself
+        // here otherwise needs a page reload to show. The Outline Fixer keeps its role apart.
+        queryClient.invalidateQueries({ queryKey: ['user', 'me'] });
+        queryClient.invalidateQueries({ queryKey: ['outline-fix', 'me'] });
         return await response.json();
       } else {
         const error = await response.json().catch(() => ({ detail: 'Failed to update user' }));
